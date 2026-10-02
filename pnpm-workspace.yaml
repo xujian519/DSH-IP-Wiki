@@ -1,0 +1,6 @@
+# pnpm 11 reads build-script permissions from this file, not from package.json.
+# esbuild places vitest's platform binary.
+packages:
+  - .
+allowBuilds:
+  esbuild: true

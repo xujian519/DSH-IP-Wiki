@@ -1,0 +1,19 @@
+# dsh-ip-wiki bundle layer: IP 知识库面板 + 检索。
+# 一条 row 同时挂载 Host 半（库读取路由 + 检索路由 + 智能体工具 + 指引段）与 Client 半（侧边栏入口 + 主面板）。
+#
+# embedding 指向本机 OpenAI 兼容端点（127.0.0.1:8000）。模型名必须是端点里的全名，
+# 短名（bge-m3 / bge-reranker-v2-m3）会返回 not_found_error。
+# apiKeyFile 是本机密钥文件，不在库内、不在本仓库内；读不到时检索自动退回关键词，不报错。
+- insert:
+    - id: dsh-ip-wiki
+      name: 'dsh-ip-wiki'
+      config:
+        libraryRoot: /Users/xujian/projects/LLM-wiki-card
+        embedding:
+          enabled: true
+          baseUrl: http://127.0.0.1:8000
+          embedModel: bge-m3-mlx-fp16
+          rerankModel: BAAI-bge-reranker-v2-m3-mlx-fp16
+          apiKeyFile: /Users/xujian/.dsh/ip-wiki/config.json
+          timeoutMs: 20000
+          rerank: true
