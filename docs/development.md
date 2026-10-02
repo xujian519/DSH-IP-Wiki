@@ -31,7 +31,7 @@ pnpm run verify:docs    # 只跑两道文档门禁（诊断用，快）
 
 ## 本地钩子与 CI
 
-这门禁由两道执行面兜住：本地钩子做窄检查，CI 做全量排练。钩子配置在 [lefthook.yml](../lefthook.yml)，CI 在 [.github/workflows/check.yml](../.github/workflows/check.yml)（[决策记录](notes/implemented/2026-10-02-local-hooks-and-ci.md)）。
+五道门禁由两道执行面兜住：本地钩子做窄检查，CI 做全量排练。钩子配置在 [lefthook.yml](../lefthook.yml)，CI 在 [.github/workflows/check.yml](../.github/workflows/check.yml)（[决策记录](notes/implemented/2026-10-02-local-hooks-and-ci.md)）。
 
 | 时机 | 做什么 |
 |---|---|
