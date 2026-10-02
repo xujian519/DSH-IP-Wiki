@@ -1,0 +1,18 @@
+# 本地窄、CI 全（决策记录：docs/notes/implemented/2026-10-02-local-hooks-and-ci.md）。
+#
+# pre-commit 只做秒级检查：暂存文件的 lint 修复与空白检查。没有 --type-aware，
+# 所以类型感知规则（no-floating-promises 等）不在这一步——它们由 pre-push 的
+# typecheck 与 CI 的全量 lint 兜住。
+# pre-push 补一道 typecheck；完整的五道门禁交给 CI 与提交前的 `pnpm run check`。
+pre-commit:
+  jobs:
+    - name: lint staged
+      glob: '*.{ts,tsx}'
+      run: pnpm exec oxlint --fix --deny-warnings --ignore-pattern 'tests/gates/fixtures/**' {staged_files}
+      stage_fixed: true
+    - name: whitespace
+      run: git diff --cached --check
+pre-push:
+  jobs:
+    - name: typecheck
+      run: pnpm run typecheck

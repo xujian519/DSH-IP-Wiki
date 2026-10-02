@@ -8,7 +8,7 @@
 |---|---|
 | 本文件 | 常驻军规、边界（always / ask first / never） |
 | [docs/architecture.md](docs/architecture.md) | 项目构成与**不可违反的架构约束**：改代码前先读 |
-| [docs/development.md](docs/development.md) | 五道门禁与命令、日常流程、构建与重载、验收评测 |
+| [docs/development.md](docs/development.md) | 五道门禁与命令、本地钩子与 CI、日常流程、构建与重载、验收评测 |
 | [docs/testing.md](docs/testing.md) | 什么算证据：负控制、覆盖率纪律、测试哲学 |
 | [docs/notes/README.md](docs/notes/README.md) | 决策记录的写法与分类 |
 | [docs/TECH_DEBT.md](docs/TECH_DEBT.md) | 已知缺口、已验收批次、未决事项 |
@@ -32,6 +32,7 @@
 ## 流程与证据
 
 - **提交前跑 `pnpm run check`**（五道门禁：typecheck / lint / 覆盖率 / 文档链接 / 笔记格式）；命令与单独诊断见 [development.md](docs/development.md#五道门禁)。
+- **本地钩子只做窄检查**：pre-commit 是暂存文件的 lint 与空白、pre-push 是 typecheck；全量五道门禁以 `pnpm run check` 为准，CI 跑的是同一条命令（[development.md](docs/development.md#本地钩子与-ci)）。
 - **改行为、架构、契约、流程、格式 → 同一批改动里带一条[决策记录](docs/notes/README.md)**；机械或局部编辑豁免，已有记录归属的决策改成更新那一条。
 - **改门禁 → 带负控制**，并按下三步走证明它拦得住：引入回归 → 确认变红 → 回退。变异不变红时先怀疑控制脚本（[证据标准](docs/testing.md#门禁的灵魂是负控制)）。
 - **验收证据必须走真实入口**：新增或修改智能体工具要有经注册表语义（`output.schema` ↔ 返回值一致）的测试，`execute` 跑通不算数。
@@ -48,4 +49,4 @@
 
 ## 还没有做到的事
 
-见 [docs/TECH_DEBT.md](docs/TECH_DEBT.md)：真机浏览器验证、dispose 断言、CI、1,137 张的语义检索冷启动、文档字数预算等都在那里，别当成已完成。
+见 [docs/TECH_DEBT.md](docs/TECH_DEBT.md)：真机浏览器验证、dispose 断言、1,137 张的语义检索冷启动、文档字数预算、CI 尚未真正跑过等都在那里，别当成已完成。

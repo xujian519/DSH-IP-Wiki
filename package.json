@@ -2,6 +2,7 @@
   "name": "dsh-ip-wiki",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.33.4",
   "description": "DeepSeek Harness 插件：IP 知识库面板——卡片树、卡片阅读、整理报告，全部在 Harness 内完成，不再二次打开 Obsidian 或文件管理器",
   "type": "module",
   "main": "./lib/index.js",
@@ -42,6 +43,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitest/coverage-v8": "^3.2.7",
     "jsdom": "^26.0.0",
+    "lefthook": "^2.1.16",
     "oxlint": "^1.85.0",
     "oxlint-tsgolint": "^7.0.2003",
     "react": "^18.3.1",
@@ -60,6 +62,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "verify:docs": "vitest run tests/gates/docs-links.spec.ts tests/gates/notes.spec.ts",
-    "check": "pnpm run typecheck && pnpm run lint && pnpm run test:coverage"
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run test:coverage",
+    "prepare": "lefthook install"
   }
 }

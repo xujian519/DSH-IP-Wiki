@@ -29,6 +29,22 @@ pnpm run verify:docs    # 只跑两道文档门禁（诊断用，快）
 
 **本项目的门禁没有例外**：不设覆盖率地板表、不排除任何 `src` 文件。
 
+## 本地钩子与 CI
+
+这门禁由两道执行面兜住：本地钩子做窄检查，CI 做全量排练。钩子配置在 [lefthook.yml](../lefthook.yml)，CI 在 [.github/workflows/check.yml](../.github/workflows/check.yml)（[决策记录](notes/implemented/2026-10-02-local-hooks-and-ci.md)）。
+
+| 时机 | 做什么 |
+|---|---|
+| pre-commit | 暂存的 `*.ts` / `*.tsx` 跑 `oxlint --fix --deny-warnings`（**不带** `--type-aware`）+ `git diff --cached --check` |
+| pre-push | `pnpm run typecheck` |
+| CI（push / PR） | `pnpm install --frozen-lockfile`，然后跑完整的 `pnpm run check` |
+
+钩子不进版本库，靠 `package.json` 的 `prepare`（`lefthook install`）在 `pnpm install` 时装上——克隆后不装就等于没有。pnpm 的版本只在 `package.json` 的 `packageManager` 里写一次；在 workflow 的 `pnpm/action-setup` 上再写一遍会被 action 拒绝。
+
+pre-commit 故意不含 `--type-aware`：类型感知 lint 要载入整个 TS 程序，秒级检查会变成分钟级。类型感知的规则由 pre-push 的 typecheck 与 CI 的全量 lint 兜住。
+
+两道执行面自己也有门禁：`tests/gates/pipeline.spec.ts` 断言 workflow 与钩子还在跑该跑的命令，并用变异副本证明它会红（见 [testing.md](testing.md#门禁的灵魂是负控制)）。
+
 ## 日常流程
 
 1. **先读** [architecture.md](architecture.md) 的九条约束——违反它们的代码会被构建或测试拦下，不是风格建议。

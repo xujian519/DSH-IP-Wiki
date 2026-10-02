@@ -11,7 +11,7 @@
 | [AGENTS.md](../AGENTS.md) | 常驻军规：每次会话都要在上下文里的规则，每条一两行 | 可以外链的细节、故事、操作步骤 |
 | [README.md](../README.md) | 产品说明：它做什么、怎么装、怎么配、库目录约定、边界与限制 | 内部约束与它们的理由 |
 | [architecture.md](architecture.md) | 项目构成 + 不可违反的架构约束 | 功能说明（→ README）、理由与备选（→ note） |
-| [development.md](development.md) | 门禁与命令、日常流程、构建与重载、验收评测怎么跑 | 约束本身（→ architecture）、证据标准（→ testing） |
+| [development.md](development.md) | 门禁与命令、本地钩子与 CI、日常流程、构建与重载、验收评测怎么跑 | 约束本身（→ architecture）、证据标准（→ testing） |
 | [testing.md](testing.md) | 什么算证据：负控制、覆盖率纪律、测试哲学 | 命令清单（→ development） |
 | [TECH_DEBT.md](TECH_DEBT.md) | 已知缺口、已验收批次、未决事项 | 决策理由（→ note） |
 | [notes/](notes/README.md) | 一条决策的为什么与被放弃的备选 | 缺口清单（→ TECH_DEBT）、操作手册 |

@@ -14,9 +14,9 @@
 
 只靠 `ctx.effect` 的写法，没有测试证明卸载后注册真的移除（[architecture.md](architecture.md) 第 7 条只规定写法，不保证卸载）。
 
-### 无 CI
+### CI 与钩子已接线，但 CI 一次都没跑过
 
-只有本地五道门禁（见 [development.md](development.md)），没有平台矩阵；本项目当前也不是 git 仓库，因此没有 hooks、没有提交前检查，`pnpm run check` 全靠人跑。
+2026-10-02 起有了本地钩子（`lefthook.yml`：pre-commit 暂存文件 lint + 空白、pre-push typecheck）与 CI（`.github/workflows/check.yml`：一条 job 跑 `pnpm run check`），仓库也 `git init` 了（[决策记录](notes/implemented/2026-10-02-local-hooks-and-ci.md)）。但**仓库还没有远端**，那个 workflow 从未执行过——目前的"CI 绿"只是"同一条命令在本地绿"。仍然缺平台矩阵（只有 ubuntu + node 22），`pnpm run build` 的 `client-shape` 门禁也不在 CI 覆盖面内。
 
 ### 向量缓存只在内存：1,137 张冷启动 163.4 秒
 

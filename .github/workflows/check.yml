@@ -1,0 +1,23 @@
+# 一次跑完本地的五道门禁（决策记录：docs/notes/implemented/2026-10-02-local-hooks-and-ci.md）。
+# 本地钩子只做窄检查，全量排练在这里；两步命令与 `pnpm run check` 逐字相同，
+# 所以「本地绿、CI 红」只可能来自环境差异，不会来自检查项不同。
+name: check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # pnpm 的版本只在 package.json 的 packageManager 字段里写一次；这里显式传
+      # version 会因为两处版本可能不一致而被 action 拒绝。
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
