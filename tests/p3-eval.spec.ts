@@ -56,34 +56,45 @@ describe.skipIf(process.env['DSH_IP_WIKI_EVAL'] !== '1')('P3 quality gate over t
       `| **合计** | | **${String(report.findings.length)}** |`,
       '',
     ].join('\n'))
-    // 全量迁移（130）→ 确认入库 → 9 组合并（139）→ Wiki 批次导入（1,137）之后：
-    // 断链仍为 0；重复标题只剩源里那 4 组同题（8 条 warning），其余都是整理阶段的活。
-    expect(report.scanned).toBe(1137)
+    // 全量迁移（130）→ 确认入库 → 9 组合并（139）→ Wiki 批次导入（1,137）→ 20 组
+    // 近重复合并落库（1,155）之后：断链仍为 0；重复标题只剩源里那 4 组同题。
+    expect(report.scanned).toBe(1155)
     expect(report.counts.critical).toBe(0)
     expect(byCode.get('broken-link')).toBeUndefined()
     expect(byCode.get('duplicate-title')).toBe(8)
     expect(byCode.get('unclassified')).toBe(82)
-    expect(byCode.get('low-confidence')).toBe(248)
-    expect(byCode.get('orphan-card')).toBe(84)
+    expect(byCode.get('low-confidence')).toBe(250)
+    expect(byCode.get('orphan-card')).toBe(79)
+    // `wiki_links` holds the targets the import could not resolve; this rule turns the
+    // ones the library keeps naming into a build-this-card list. 725 targets are still
+    // unanswered and 34 of them are named by ten cards or more.
+    expect(byCode.get('wanted-card')).toBe(34)
+    // The one domain the rest of the library cannot reach: the 24 trademark cards
+    // reference nothing outside their own domain and nothing outside references them.
+    // Bridge cards and one-directional domain pairs were measured too (211 cards span
+    // three domains, 19 domain pairs point only one way) and left out: both describe
+    // how the library is built rather than something to fix.
+    expect(byCode.get('island-domain')).toBe(1)
+    expect(report.findings.find(finding => finding.code === 'island-domain')?.message).toContain('商标')
     expect(byCode.get('index-drift')).toBeUndefined()
     expect(report.verdict).toBe('fail')
 
-    // The landed state the panel produced: the nine survivors replaced 22 cards, and
-    // every replacement pointer resolves to a card that is still in the library.
+    // The landed state the panel produced: the twenty-nine merge batches replaced 63
+    // cards, and every replacement pointer resolves to a card still in the library.
     const cards = await listCardDocuments(REAL_LIBRARY)
     const live = cards.filter(card => card.status !== 'deprecated')
     const deprecated = cards.filter(card => card.status === 'deprecated')
-    expect(cards).toHaveLength(1137)
-    expect(live).toHaveLength(1115)
-    expect(deprecated).toHaveLength(22)
+    expect(cards).toHaveLength(1155)
+    expect(live).toHaveLength(1092)
+    expect(deprecated).toHaveLength(63)
     expect(deprecated.every(card => cards.some(other => other.path === card.supersededBy))).toBe(true)
     // Four duplicate groups came in with the Wiki pages; each holds two cards, so the
     // gate reports one warning per card.
     expect(duplicateGroups(live)).toHaveLength(4)
     // A merged card keeps the title it was merged under, so the whole set still groups
     // each survivor with the cards it absorbed. The gate compares live cards only,
-    // which is exactly why those nine groups raise no finding.
-    expect(duplicateGroups(cards)).toHaveLength(13)
+    // which is exactly why those merge groups raise no finding.
+    expect(duplicateGroups(cards)).toHaveLength(32)
   }, 60_000)
 
   it('merges a duplicate pair on a copy, clears the finding, and reverts byte for byte', async () => {

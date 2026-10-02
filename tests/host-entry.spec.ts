@@ -124,6 +124,7 @@ describe('apply', () => {
     })
     expect(stub.sections[0]?.text).toContain(fixture.root)
     expect(stub.labels).toEqual([
+      'dsh-ip-wiki: vector warmup',
       'dsh-ip-wiki: library routes',
       'dsh-ip-wiki: retrieval tools',
       'dsh-ip-wiki: guidance',
@@ -173,6 +174,8 @@ describe('apply', () => {
       semantic: false,
       reason: '未配置 embedding（config.embedding 缺失）',
       embedModel: '',
+      warmed: 0,
+      total: 0,
     })
     await fixture.dispose()
   })

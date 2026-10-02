@@ -423,7 +423,7 @@ describe('createSearchService', () => {
   it('describes semantic availability with the reason when it is off', async () => {
     const { root } = await library()
     const service = createSearchService({ libraryRoot: root, plan: OFF, fetchImpl: endpoint({}).fetchImpl, minScore: undefined })
-    await expect(service.describe()).resolves.toEqual({ semantic: false, reason: '未配置 embedding', embedModel: '' })
+    await expect(service.describe()).resolves.toEqual({ semantic: false, reason: '未配置 embedding', embedModel: '', warmed: 0, total: 0 })
   })
 
   it('describes semantic availability when the key is there', async () => {
@@ -434,7 +434,7 @@ describe('createSearchService', () => {
       fetchImpl: endpoint({}).fetchImpl,
       minScore: undefined,
     })
-    await expect(service.describe()).resolves.toEqual({ semantic: true, reason: '', embedModel: DEFAULT_EMBED_MODEL })
+    await expect(service.describe()).resolves.toEqual({ semantic: true, reason: '', embedModel: DEFAULT_EMBED_MODEL, warmed: 0, total: 0 })
   })
 
   it('names the key file it could not read', async () => {
@@ -567,6 +567,171 @@ describe('createSearchService', () => {
     ].join('\n'))
     await service.search('三步法', 5)
     expect(stub.paths.length).toBe(first + 3)
+  })
+
+  it('embeds the corpus in batches and keeps the batches that succeeded', async () => {
+    // Forty cards need two batches. The endpoint refuses the second one, so the first has
+    // to survive into the next search — which then embeds only the eight cards still short.
+    // `corpusSizes` is that history: 32 + 8 fails, then 8 succeeds.
+    const root = await mkdtemp(join(tmpdir(), 'dsh-ip-wiki-batch-'))
+    created.push(root)
+    await mkdir(join(root, 'cards', 'rule'), { recursive: true })
+    for (let index = 1; index <= 40; index += 1) {
+      const id = `card-${String(index).padStart(2, '0')}`
+      await writeFile(join(root, 'cards', 'rule', `${id}.md`), [
+        '---', `id: "${id}"`, 'type: "rule"', `title: "批量卡片 ${String(index)}"`, '---', '',
+        `# 批量卡片 ${String(index)}`, '', '批量卡片正文。',
+      ].join('\n'))
+    }
+    const keyFile = join(root, 'local-key.json')
+    await writeFile(keyFile, '{"apiKey":"secret"}')
+    const corpusSizes: number[] = []
+    const stub: Fetcher = async (_url, init) => {
+      const body = JSON.parse(init.body ?? '{}') as Record<string, unknown>
+      const inputs = (body['input'] ?? []) as string[]
+      const answer = (data: unknown): Awaited<ReturnType<Fetcher>> => ({ ok: true, status: 200, json: async () => data })
+      // A single input is the query; a corpus batch is 32 or 8 here, never one.
+      if (inputs.length === 1) return answer({ data: [{ embedding: [1, 0] }] })
+      corpusSizes.push(inputs.length)
+      if (corpusSizes.length === 2) throw new Error('第二批超时')
+      return answer({ data: inputs.map(() => ({ embedding: [1, 0] })) })
+    }
+    const service = createSearchService({
+      libraryRoot: root,
+      plan: { ...PLAN, apiKeyFile: keyFile },
+      fetchImpl: stub,
+      minScore: undefined,
+    })
+    const first = await service.search('批量卡片', 5)
+    expect(first.mode).toBe('vector')
+    expect(first.degraded).toContain('嵌入服务只覆盖 32/40 张卡片')
+    expect(first.degraded).toContain('嵌入调用失败，已保留已嵌入的卡片（32/40）：第二批超时')
+    const second = await service.search('批量卡片', 5)
+    expect(second.mode).toBe('vector')
+    expect(second.degraded).toBe('')
+    expect(corpusSizes).toEqual([32, 8, 8])
+  })
+
+  it('drops a non-Error batch failure into the same note', async () => {
+    const { root, keyFile } = await library()
+    const stub: Fetcher = async (_url, init) => {
+      const body = JSON.parse(init.body ?? '{}') as Record<string, unknown>
+      const inputs = (body['input'] ?? []) as string[]
+      if (inputs.length === 1) return { ok: true, status: 200, json: async () => ({ data: [{ embedding: [1, 0] }] }) }
+      throw '嵌入端点拒绝连接'
+    }
+    const service = createSearchService({
+      libraryRoot: root,
+      plan: { ...PLAN, apiKeyFile: keyFile },
+      fetchImpl: stub,
+      minScore: undefined,
+    })
+    const result = await service.search('三步法', 5)
+    expect(result.mode).toBe('keyword')
+    expect(result.degraded).toContain('嵌入调用失败，已保留已嵌入的卡片（0/2）：嵌入端点拒绝连接')
+  })
+
+  it('warms the cache without a query and reports how far it got', async () => {
+    const { root, keyFile } = await library()
+    const stub = endpoint({})
+    const service = createSearchService({
+      libraryRoot: root,
+      plan: { ...PLAN, apiKeyFile: keyFile },
+      fetchImpl: stub.fetchImpl,
+      minScore: undefined,
+    })
+    service.warm()
+    // The caller is deliberately not awaited, so the spec waits the way the panel does:
+    // it polls the status the plugin publishes.
+    for (let attempt = 0; attempt < 200 && (await service.describe()).total === 0; attempt += 1) {
+      await new Promise(resolve => { setTimeout(resolve, 2) })
+    }
+    await expect(service.describe()).resolves.toMatchObject({ warmed: 2, total: 2 })
+    // The vectors are on disk now, so a search pays for the query vector and nothing else.
+    const asked = stub.paths.length
+    await service.search('三步法', 5)
+    expect(stub.paths.length).toBe(asked + 1)
+  })
+
+  it('reuses the cache a previous process wrote', async () => {
+    const { root, keyFile } = await library()
+    const first = endpoint({})
+    const options = { libraryRoot: root, plan: { ...PLAN, apiKeyFile: keyFile }, minScore: undefined }
+    await createSearchService({ ...options, fetchImpl: first.fetchImpl }).search('三步法', 5)
+    // A fresh service is what a restarted host gets; the vectors it needs are on disk.
+    const second = endpoint({})
+    await createSearchService({ ...options, fetchImpl: second.fetchImpl }).search('三步法', 5)
+    expect(second.paths).toEqual(['/v1/embeddings'])
+  })
+
+  it('leaves a library alone when semantic retrieval is off', async () => {
+    const { root } = await library()
+    const stub = endpoint({})
+    const service = createSearchService({ libraryRoot: root, plan: OFF, fetchImpl: stub.fetchImpl, minScore: undefined })
+    service.warm()
+    await new Promise(resolve => { setTimeout(resolve, 10) })
+    expect(stub.paths).toEqual([])
+    await expect(service.describe()).resolves.toMatchObject({ warmed: 0, total: 0 })
+  })
+
+  it('does nothing when it is disposed before it starts', async () => {
+    const { root, keyFile } = await library()
+    const stub = endpoint({})
+    const service = createSearchService({
+      libraryRoot: root,
+      plan: { ...PLAN, apiKeyFile: keyFile },
+      fetchImpl: stub.fetchImpl,
+      minScore: undefined,
+    })
+    const stop = service.warm()
+    stop()
+    await new Promise(resolve => { setTimeout(resolve, 10) })
+    expect(stub.paths).toEqual([])
+  })
+
+  it('stops a warmup between batches when its caller disposes it', async () => {
+    // Forty cards are two batches of thirty-two and eight. Disposing while the first is in
+    // flight must keep the second from ever being asked for, or an unloaded plugin would
+    // go on spending the endpoint's time.
+    const root = await mkdtemp(join(tmpdir(), 'dsh-ip-wiki-warm-stop-'))
+    created.push(root)
+    await mkdir(join(root, 'cards', 'rule'), { recursive: true })
+    for (let index = 1; index <= 40; index += 1) {
+      const id = `card-${String(index).padStart(2, '0')}`
+      await writeFile(join(root, 'cards', 'rule', `${id}.md`), [
+        '---', `id: "${id}"`, 'type: "rule"', `title: "预热卡片 ${String(index)}"`, '---', '',
+        `# 预热卡片 ${String(index)}`, '', '正文。',
+      ].join('\n'))
+    }
+    const keyFile = join(root, 'local-key.json')
+    await writeFile(keyFile, '{"apiKey":"secret"}')
+    let batches = 0
+    let release: () => void = () => {}
+    const inFlight = new Promise<void>(resolve => { release = resolve })
+    const stub: Fetcher = async (_url, init) => {
+      const body = JSON.parse(init.body ?? '{}') as Record<string, unknown>
+      const inputs = (body['input'] ?? []) as string[]
+      batches += 1
+      if (batches === 1) await inFlight
+      return { ok: true, status: 200, json: async () => ({ data: inputs.map(() => ({ embedding: [1, 0] })) }) }
+    }
+    const service = createSearchService({
+      libraryRoot: root,
+      plan: { ...PLAN, apiKeyFile: keyFile },
+      fetchImpl: stub,
+      minScore: undefined,
+    })
+    const stop = service.warm()
+    for (let attempt = 0; attempt < 500 && batches === 0; attempt += 1) {
+      await new Promise(resolve => { setTimeout(resolve, 2) })
+    }
+    expect(batches).toBe(1)
+    stop()
+    release()
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      await new Promise(resolve => { setTimeout(resolve, 2) })
+    }
+    expect(batches).toBe(1)
   })
 
   it('moves a card that repeats an earlier answer behind the distinct one', async () => {

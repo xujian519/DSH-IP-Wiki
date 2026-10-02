@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /** The Markdown renderer: the block kinds reports and cards contain. */
 import { describe, expect, it } from 'vitest'
-import { Markdown, parseBlocks } from '../src/client/markdown'
-import { mount } from './dom'
+import { Markdown, parseBlocks, type WikilinkAccess } from '../src/client/markdown'
+import { defined, mount } from './dom'
 
 describe('parseBlocks', () => {
   it('reads headings by level', () => {
@@ -142,6 +142,57 @@ describe('Markdown', () => {
   it('renders an empty document as no blocks', async () => {
     const view = await mount(<Markdown text="" />)
     expect(view.container.textContent).toBe('')
+    await view.unmount()
+  })
+})
+
+describe('wikilinks', () => {
+  /** A resolver for a library holding one trademark card. */
+  function access(opened: string[]): WikilinkAccess {
+    const pages: Record<string, string> = { 商标法: 'cards/statute/trademark.md' }
+    return {
+      resolve: name => pages[name],
+      open: path => { opened.push(path) },
+    }
+  }
+
+  it('resolves the page behind an Obsidian anchor and label', async () => {
+    // Obsidian writes `[[page#section|label]]`: the reference is the page, the label is
+    // what the reader reads. Measured on the real library, 400 of its 5,513 body links
+    // only resolve once the anchor and the label come off, and 550 alias links would
+    // otherwise print their own `page|label` markup.
+    const opened: string[] = []
+    const view = await mount(
+      <Markdown
+        text={[
+          '[[商标法#第十一条-显著性|商标法第11条 - 显著性]]',
+          '',
+          '[[商标法#第十一条-显著性]]',
+          '',
+          '[[未知页|另一个名字]]',
+          '',
+          '[[商标法|]]',
+        ].join('\n')}
+        wikilink={access(opened)}
+      />,
+    )
+    expect(view.all('button.iw-wikilink-open').map(button => button.textContent)).toEqual([
+      '商标法第11条 - 显著性',
+      // No label, so the anchor stays visible rather than being silently dropped.
+      '商标法#第十一条-显著性',
+      // An empty label is no label: showing nothing would leave an invisible control.
+      '商标法',
+    ])
+    expect(view.all('span.iw-wikilink').map(span => span.textContent)).toEqual(['另一个名字'])
+    await view.click(defined(view.all('button.iw-wikilink-open')[0]))
+    expect(opened).toEqual(['cards/statute/trademark.md'])
+    await view.unmount()
+  })
+
+  it('leaves every wikilink plain text when no resolver is given', async () => {
+    const view = await mount(<Markdown text="见 [[商标法#第十一条-显著性|商标法第11条]]。" />)
+    expect(view.all('button.iw-wikilink-open')).toEqual([])
+    expect(view.all('span.iw-wikilink').map(span => span.textContent)).toEqual(['商标法第11条'])
     await view.unmount()
   })
 })

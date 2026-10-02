@@ -52,6 +52,27 @@ export interface LintFacts {
 /** Confidence below which the migration already queued a card for review. */
 const REVIEW_BELOW = 0.8
 
+/**
+ * How many cards must point at a missing link target before it is worth a card.
+ *
+ * Measured on the real 1,155-card library: 1,017 cards carry `wiki_links`, holding
+ * 4,290 entries over 1,185 distinct targets. A card answers 460 of those targets
+ * already, and 725 have none. The tail is long — 357 targets are named by a single
+ * card — so a threshold of ten keeps this rule to the 34 targets that read as a
+ * backlog rather than as a dump.
+ */
+const WANTED_AT_LEAST = 10
+
+/**
+ * How many live cards a business domain needs before its isolation is worth reporting.
+ *
+ * Measured on the real 1,155-card library: 商标 (24 cards) is the only domain no
+ * reference crosses in either direction. 外观设计 holds 28 cross-references and
+ * 权属问题 17, so they read as internally focused rather than cut off, and the line is
+ * drawn at none at all. 专利程序 holds one card and is left to the size floor.
+ */
+const ISLAND_DOMAIN_AT_LEAST = 5
+
 /** One set of cards whose titles are the same once punctuation and case are gone. */
 export interface DuplicateGroup {
   /** The first card's title, as a label for the group. */
@@ -175,6 +196,63 @@ export function lintCards(
         code: 'duplicate-title',
         message: `标题重复（${String(group.paths.length)} 张）：${path}`,
         path,
+      })
+    }
+  }
+  // A concept the library keeps pointing at without having a card for it. `wiki_links`
+  // holds the targets that resolved to nothing when the cards were written; a card may
+  // have answered one since, so the check resolves against the cards that exist now and
+  // a target that found its card leaves the report on its own.
+  const resolvedNow = new Set<string>()
+  for (const document of documents) {
+    resolvedNow.add(normalizeTitle(document.id))
+    resolvedNow.add(normalizeTitle(document.title))
+  }
+  const wanted = new Map<string, number>()
+  for (const document of documents) {
+    for (const target of new Set(document.wikiLinks)) {
+      if (target === '' || resolvedNow.has(normalizeTitle(target))) continue
+      wanted.set(target, (wanted.get(target) ?? 0) + 1)
+    }
+  }
+  // Most-referenced first. The report's own ordering is stable, so pushing in this order
+  // is what makes the most-cited missing card read first.
+  const ranked = [...wanted]
+    .filter(([, count]) => count >= WANTED_AT_LEAST)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+  for (const [target, count] of ranked) {
+    findings.push({
+      tier: 'suggestion',
+      code: 'wanted-card',
+      message: `${String(count)} 张卡提到、但库里没有对应的卡：${target}`,
+      path: '',
+    })
+  }
+  // A business domain the rest of the library cannot reach: no live card's reference
+  // crosses its border in either direction. A domain that is merely mostly internal is
+  // not an island, which is why the line is drawn at none rather than at a low ratio.
+  const domainSizes = new Map<string, number>()
+  for (const document of live) domainSizes.set(document.domainL2, (domainSizes.get(document.domainL2) ?? 0) + 1)
+  const crossing = new Set<string>()
+  for (const document of live) {
+    for (const related of document.relatedConcepts) {
+      const target = byId.get(related)
+      if (target === undefined || target.status === 'deprecated' || target.path === document.path) continue
+      if (target.domainL2 === document.domainL2) continue
+      crossing.add(document.domainL2)
+      crossing.add(target.domainL2)
+    }
+  }
+  // With a single domain there is no other domain to be cut off from, and the statement
+  // would be vacuously true for every library that has not been classified yet.
+  if (domainSizes.size > 1) {
+    for (const [domain, count] of [...domainSizes].sort((left, right) => left[0].localeCompare(right[0]))) {
+      if (count < ISLAND_DOMAIN_AT_LEAST || crossing.has(domain)) continue
+      findings.push({
+        tier: 'suggestion',
+        code: 'island-domain',
+        message: `${String(count)} 张卡的域与其它域没有任何互链（domain_l2）：${domain}`,
+        path: '',
       })
     }
   }

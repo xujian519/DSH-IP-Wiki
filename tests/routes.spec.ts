@@ -22,7 +22,7 @@ function routeDeps(root: string): RouteDeps {
   return {
     libraryRoot: root,
     search: async (query, limit) => ({ query, mode: 'keyword', degraded: '', scanned: limit, deprecated: 0, duplicates: 0, hits: [] }),
-    searchStatus: async () => ({ semantic: false, reason: 'spec stub', embedModel: '' }),
+    searchStatus: async () => ({ semantic: false, reason: 'spec stub', embedModel: '', warmed: 0, total: 0 }),
     rebuildIndex: async () => {
       if (failingIndexWithString) throw 'index exploded'
       if (failingIndex) throw new Error('索引目录不可写')
@@ -382,7 +382,7 @@ describe('the routes', () => {
   it('answers the search-status route', async () => {
     const response = await call('/dsh-ip-wiki/search-status')
     expect(response.status).toBe(200)
-    expect(response.body).toEqual({ semantic: false, reason: 'spec stub', embedModel: '' })
+    expect(response.body).toEqual({ semantic: false, reason: 'spec stub', embedModel: '', warmed: 0, total: 0 })
   })
 })
 

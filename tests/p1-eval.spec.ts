@@ -35,11 +35,12 @@ describe.skipIf(process.env['DSH_IP_WIKI_EVAL'] !== '1')('P1 retrieval acceptanc
         embedModel: 'bge-m3-mlx-fp16',
         rerankModel: 'BAAI-bge-reranker-v2-m3-mlx-fp16',
         apiKeyFile: KEY_FILE,
-        // The corpus is 1,137 cards since the Wiki import, and the vector cache lives in
-        // process memory, so the run's first query embeds the whole library (measured
-        // 163 s). The timeout has to cover that cold start or every query measures the
-        // keyword fallback instead of the pipeline.
-        timeoutMs: 240_000,
+        // The deployed timeout, so this measures the pipeline the panel and the tools
+        // actually run. It used to be 240 s here because the corpus went to the endpoint
+        // as one request (measured 107.5 s for 1,155 cards) and a 20 s timeout degraded
+        // every query to keywords; the corpus is embedded in batches now, so each request
+        // costs about three seconds and the first query still pays the whole cold start.
+        timeoutMs: 20_000,
         rerank: true,
       }),
       fetchImpl: globalThis.fetch,

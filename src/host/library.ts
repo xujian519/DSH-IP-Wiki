@@ -161,6 +161,7 @@ function documentFrom(text: string, path: string): CardDocument | undefined {
     supersededBy: field(fields, 'superseded_by', ''),
     lawRefs: textList(fields, 'law_refs'),
     relatedConcepts: textList(fields, 'related_concepts'),
+    wikiLinks: textList(fields, 'wiki_links'),
     jurisdiction: field(fields, 'jurisdiction', ''),
     sourcePath,
     needsReview: fields['needs_review'] === true,

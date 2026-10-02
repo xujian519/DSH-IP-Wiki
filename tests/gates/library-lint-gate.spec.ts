@@ -83,6 +83,101 @@ describe('the library quality gate', () => {
     }
   })
 
+  it('names the concept the library keeps citing without having a card for it', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-ip-wiki-wanted-'))
+    try {
+      await mkdir(join(root, 'cards', 'rule'), { recursive: true })
+      await mkdir(join(root, 'index'), { recursive: true })
+      // The library does have a card for 专利法第22条第2款, and does not have one for
+      // 专利法第26条第3款 — both are cited by every card below.
+      await writeFile(join(root, 'cards', 'rule', 'answered.md'), cardText([
+        'id: "answered"',
+        'type: "rule"',
+        'title: "专利法第22条第2款"',
+        'domain_l2: "OA 答复"',
+        'concept: "法条"',
+        'confidence: 0.9',
+      ]))
+      for (let index = 1; index <= 10; index += 1) {
+        await writeFile(join(root, 'cards', 'rule', `c-${String(index)}.md`), cardText([
+          `id: "c-${String(index)}"`,
+          'type: "rule"',
+          `title: "引用卡 ${String(index)}"`,
+          'domain_l2: "OA 答复"',
+          'concept: "引用"',
+          'confidence: 0.9',
+          'related_concepts:',
+          '  - "answered"',
+          'wiki_links:',
+          '  - "专利法第22条第2款"',
+          '  - "专利法第26条第3款"',
+        ]))
+      }
+      await writeFile(join(root, 'index', 'card-index.json'),
+        JSON.stringify({ schema_version: 1, total_cards: 11 }))
+
+      const report = await readLintReport(root, 'warning')
+      // Only the target no card answers: the one a card does answer has to leave the
+      // report, or this rule would never clear and would be noise nobody can act on.
+      expect(report.findings).toEqual([{
+        tier: 'suggestion',
+        code: 'wanted-card',
+        message: '10 张卡提到、但库里没有对应的卡：专利法第26条第3款',
+        path: '',
+      }])
+      expect(report.verdict).toBe('pass')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('names a business domain nothing links in or out of', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-ip-wiki-island-'))
+    try {
+      await mkdir(join(root, 'cards', 'rule'), { recursive: true })
+      await mkdir(join(root, 'index'), { recursive: true })
+      // Five cards of one domain, linked only to each other, and two of another — so the
+      // first domain is reachable from nowhere while the second is merely small.
+      for (let index = 1; index <= 5; index += 1) {
+        await writeFile(join(root, 'cards', 'rule', `island-${String(index)}.md`), cardText([
+          `id: "island-${String(index)}"`,
+          'type: "rule"',
+          `title: "商标卡 ${String(index)}"`,
+          'domain_l2: "商标"',
+          'concept: "商标"',
+          'confidence: 0.9',
+          'related_concepts:',
+          `  - "island-${String(index === 1 ? 2 : 1)}"`,
+        ]))
+      }
+      for (const [index, peer] of [[1, 2], [2, 1]] as const) {
+        await writeFile(join(root, 'cards', 'rule', `main-${String(index)}.md`), cardText([
+          `id: "main-${String(index)}"`,
+          'type: "rule"',
+          `title: "审查卡 ${String(index)}"`,
+          'domain_l2: "专利审查"',
+          'concept: "审查"',
+          'confidence: 0.9',
+          'related_concepts:',
+          `  - "main-${String(peer)}"`,
+        ]))
+      }
+      await writeFile(join(root, 'index', 'card-index.json'),
+        JSON.stringify({ schema_version: 1, total_cards: 7 }))
+
+      const report = await readLintReport(root, 'warning')
+      expect(report.findings).toEqual([{
+        tier: 'suggestion',
+        code: 'island-domain',
+        message: '5 张卡的域与其它域没有任何互链（domain_l2）：商标',
+        path: '',
+      }])
+      expect(report.verdict).toBe('pass')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('passes a clean library, so the gate is not simply always red', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-ip-wiki-clean-'))
     try {

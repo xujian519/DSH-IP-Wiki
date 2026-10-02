@@ -180,6 +180,7 @@ describe('parseCardDocumentPayload', () => {
       body,
       lawRefs: ['专利法第 22 条第 3 款'],
       relatedConcepts: ['old-1', 'old-2'],
+      wikiLinks: [],
       jurisdiction: 'CN',
       fromId: '',
       supersededBy: '',
@@ -305,9 +306,13 @@ describe('parseSearchResult and parseSearchStatus', () => {
   })
 
   it('reads the retrieval status', () => {
-    expect(parseSearchStatus({ semantic: true })).toEqual({ semantic: true, reason: '', embedModel: '' })
+    expect(parseSearchStatus({ semantic: true })).toEqual({ semantic: true, reason: '', embedModel: '', warmed: 0, total: 0 })
     expect(parseSearchStatus({ semantic: false, reason: '未配置', embedModel: 'm' }))
-      .toEqual({ semantic: false, reason: '未配置', embedModel: 'm' })
+      .toEqual({ semantic: false, reason: '未配置', embedModel: 'm', warmed: 0, total: 0 })
+    // Warming progress crosses the wire, so the panel can say how much of the corpus the
+    // semantic stage has seen; a payload that names neither counts as nothing warmed.
+    expect(parseSearchStatus({ semantic: true, warmed: 12, total: 40 }))
+      .toEqual({ semantic: true, reason: '', embedModel: '', warmed: 12, total: 40 })
   })
 
   it('refuses a retrieval status that is not an object', () => {

@@ -79,6 +79,7 @@ const DOCUMENT_A: CardDocument = {
   body: '# 三步法\n\n**第一步**：确定最接近的现有技术。',
   lawRefs: ['专利法第 22 条第 3 款'],
   relatedConcepts: ['old-1', 'old-2'],
+  wikiLinks: [],
   jurisdiction: 'CN',
   fromId: '',
   supersededBy: '',
@@ -92,6 +93,7 @@ const DOCUMENT_B: CardDocument = {
   body: '定义正文。',
   lawRefs: [],
   relatedConcepts: [],
+  wikiLinks: [],
   jurisdiction: '',
   fromId: '',
   supersededBy: '',
@@ -106,7 +108,7 @@ const REPORT_DOC: ReportDocument = {
 }
 
 /** The retrieval status a working endpoint reports. */
-const RETRIEVAL: SearchStatus = { semantic: true, reason: '', embedModel: 'bge-m3' }
+const RETRIEVAL: SearchStatus = { semantic: true, reason: '', embedModel: 'bge-m3', warmed: 2, total: 2 }
 
 /** A search answer with one hit. */
 const SEARCH: SearchResult = {
@@ -473,6 +475,7 @@ describe('LibraryPanel', () => {
         body: '正文',
         lawRefs: [],
         relatedConcepts: [],
+        wikiLinks: [],
         jurisdiction: '',
         fromId: '',
         supersededBy: 'cards/rule/newer.md',
@@ -915,9 +918,21 @@ describe('LibraryPanel', () => {
     await failing.unmount()
   })
 
+  it('shows how much of the corpus the semantic stage has seen', async () => {
+    const warming = await mount(<LibraryPanel api={stubApi({
+      retrieval: { semantic: true, reason: '', embedModel: 'bge-m3', warmed: 12, total: 40 },
+    })} localeId="zh-CN" />)
+    expect(warming.text()).toContain('预热12/40')
+    await warming.unmount()
+    // A fully warm corpus says nothing about warming: there is no progress left to report.
+    const warm = await mount(<LibraryPanel api={stubApi()} localeId="zh-CN" />)
+    expect(warm.text()).not.toContain('预热')
+    await warm.unmount()
+  })
+
   it('warns when only keywords are available and reads the mode chip otherwise', async () => {
     const keywordOnly = await mount(<LibraryPanel api={stubApi({
-      retrieval: { semantic: false, reason: '未读到本地 API key', embedModel: '' },
+      retrieval: { semantic: false, reason: '未读到本地 API key', embedModel: '', warmed: 0, total: 0 },
     })} localeId="zh-CN" />)
     expect(keywordOnly.text()).toContain('仅关键词')
     expect(keywordOnly.all('span.iw-chip-warn').length).toBeGreaterThan(0)

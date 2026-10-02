@@ -750,6 +750,9 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
           <span className={retrieval.semantic ? 'iw-chip' : 'iw-chip iw-chip-warn'}>
             {t.retrieval}
             <b>{retrieval.semantic ? t.retrievalSemantic : t.retrievalKeyword}</b>
+            {retrieval.total > 0 && retrieval.warmed < retrieval.total
+              ? <>{t.retrievalWarming}<b>{`${String(retrieval.warmed)}/${String(retrieval.total)}`}</b></>
+              : null}
           </span>
         )}
         {busy ? (

@@ -52,7 +52,8 @@ function searchStub(result: Partial<SearchResult> = {}): SearchService {
   }
   return {
     search: async () => answer,
-    describe: async () => ({ semantic: true, reason: '', embedModel: 'model' }),
+    describe: async () => ({ semantic: true, reason: '', embedModel: 'model', warmed: 0, total: 0 }),
+    warm: () => () => {},
   }
 }
 
@@ -151,6 +152,7 @@ describe('verifyCitation', () => {
     body: '# 标题\n\n三步法的第一步是确定最接近的现有技术。',
     lawRefs: [],
     relatedConcepts: [],
+    wikiLinks: [],
     jurisdiction: '',
     fromId: '',
     supersededBy: '',

@@ -120,6 +120,13 @@ export function apply(ctx: Context, config: Config = {}): void {
     fetchImpl: globalThis.fetch,
     minScore: config.minScore,
   })
+  // Warm the vector cache while nothing is waiting on it. The whole corpus takes about
+  // 110 s to embed, so a start that leaves it to the first search makes that search
+  // answer from keywords. The disposer stops the run before its next batch.
+  ctx.effect(
+    () => search.warm(),
+    'dsh-ip-wiki: vector warmup',
+  )
   ctx.effect(
     () => webServer.register({
       kind: 'prefix',

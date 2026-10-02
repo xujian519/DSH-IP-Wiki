@@ -224,6 +224,7 @@ export function parseCardDocumentPayload(value: unknown): CardDocument {
     body: textOr(item['body']),
     lawRefs: textsOf(item['lawRefs']),
     relatedConcepts: textsOf(item['relatedConcepts']),
+    wikiLinks: textsOf(item['wikiLinks']),
     jurisdiction: textOr(item['jurisdiction']),
     fromId: textOr(item['fromId']),
     supersededBy: textOr(item['supersededBy']),
@@ -296,6 +297,8 @@ export function parseSearchStatus(value: unknown): SearchStatus {
     semantic: item['semantic'] === true,
     reason: textOr(item['reason']),
     embedModel: textOr(item['embedModel']),
+    warmed: numberOf(item['warmed']) ?? 0,
+    total: numberOf(item['total']) ?? 0,
   }
 }
 

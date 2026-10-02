@@ -103,6 +103,13 @@ export interface CardDocument extends CardSummary {  /** Markdown body after the
   readonly lawRefs: readonly string[]
   /** Related card ids the card records. */
   readonly relatedConcepts: readonly string[]
+  /**
+   * Link targets the card points at that resolved to no card, as the import recorded
+   * them. A target named here often enough is a concept the library keeps using
+   * without having a card for it, which is what the gate's `wanted-card` rule reports.
+   * Nothing reads these as references: `relatedConcepts` holds the ones that resolved.
+   */
+  readonly wikiLinks: readonly string[]
   /** Jurisdiction code. */
   readonly jurisdiction: string
   /**
@@ -265,4 +272,8 @@ export interface SearchStatus {
   readonly reason: string
   /** The embedding model in use, or empty text when none is configured. */
   readonly embedModel: string
+  /** How many cards the last embedding round found a vector for. */
+  readonly warmed: number
+  /** How many cards that round covered; zero before any round has run. */
+  readonly total: number
 }

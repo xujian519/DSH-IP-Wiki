@@ -19,11 +19,13 @@
  * @module dsh-ip-wiki/host/search
  */
 import { createHash } from 'node:crypto'
+import { dirname, join } from 'node:path'
 import type { CardDocument, SearchHit, SearchMode, SearchResult, SearchStatus } from '../shared/card'
 import type { Fetcher } from '../shared/wire'
 import { createEmbedder, cosine, readApiKey, type Embedder, type EmbeddingPlan } from './embeddings'
 import { listCardDocuments } from './library'
 import { buildIndex, searchIndex, snippet, type RetrievalDoc, type ScoredDoc } from './retrieval'
+import { CACHE_FILE, readVectorCache, writeVectorCache } from './vectors'
 
 /**
  * How many candidates each recall stage hands to the next.
@@ -47,6 +49,19 @@ const STAGE_SLOTS = CANDIDATES / 2
 
 /** How many characters of a card the embedding model sees. */
 const EMBED_CHARS = 1200
+
+/**
+ * How many cards one embedding request carries.
+ *
+ * The corpus is embedded in batches so that progress survives a request that fails or
+ * times out; a single request for the whole library is what used to keep the cache
+ * empty forever. Measured against the deployed local endpoint: 16 texts take 1.5 s,
+ * 32 take 3.0 s, 64 take 5.8 s — linear, so the total is the same whatever the batch
+ * size, and a smaller batch buys margin under `embedding.timeoutMs` (32 leaves about
+ * six times the measured cost). A 1,155-card library needs ~110 s either way, which is
+ * why the first search is slow and later ones are not.
+ */
+const EMBED_BATCH = 32
 
 /** How many characters of a card the reranker sees. */
 const RERANK_CHARS = 1200
@@ -98,6 +113,15 @@ export interface SearchService {
    * @returns the availability, its reason, and the model.
    */
   describe(): Promise<SearchStatus>
+  /**
+   * Embed whatever the cache is missing, without a query waiting on it.
+   *
+   * Called once at plugin load: the corpus takes about 110 s to embed, and a start that
+   * has not done it makes the first search useless. The run is best effort — a search
+   * reports its own degradation, so a warmup failure has nobody to tell.
+   * @returns a function that stops the run before its next batch.
+   */
+  warm(): () => void
 }
 
 /**
@@ -218,10 +242,26 @@ export function createSearchService(deps: {
   readonly plan: EmbeddingPlan
   readonly fetchImpl: Fetcher
   readonly minScore: number | undefined
+  /** Where the vector cache lives; defaults to the plugin's own directory outside any library. */
+  readonly cacheFile?: string
 }): SearchService {
   const minScore = deps.minScore ?? DEFAULT_MIN_SCORE
+  // The cache sits beside the local key file: that is the plugin's own directory outside
+  // any library, and it moves with the key instead of being a second place to configure.
+  const cacheFile = deps.cacheFile
+    ?? join(dirname(deps.plan.enabled ? deps.plan.apiKeyFile : CACHE_FILE), 'vectors.json')
   const vectors = new Map<string, number[]>()
+  let loaded = false
+  let warmed = 0
+  let total = 0
   let resolved: { readonly embedder: Embedder } | { readonly reason: string } | undefined
+
+  /** Read the on-disk cache once, so a new process starts where the last one stopped. */
+  async function loadCache(): Promise<void> {
+    if (loaded) return
+    loaded = true
+    for (const [key, vector] of await readVectorCache(cacheFile)) vectors.set(key, vector)
+  }
 
   /** Resolve the key and the client once, and remember why it failed if it did. */
   async function embedderFor(): Promise<{ readonly embedder: Embedder } | { readonly reason: string }> {
@@ -244,28 +284,58 @@ export function createSearchService(deps: {
   }
 
   /**
-   * Embed whatever is missing or changed.
+   * Embed whatever is missing or changed, one batch at a time.
+   *
+   * The cache is written per batch, so a request that fails still leaves every earlier
+   * batch behind for the next search. The first batch that throws ends the round rather
+   * than paying the request timeout once per remaining batch — the batches are
+   * homogeneous, so one timing out means the next one will too.
    * @param embedder - the resolved client.
    * @param docs - the current corpus.
-   * @returns the pairs that have a vector, and how many the server skipped.
+   * @param halted - whether the caller has given up, checked between batches.
+   * @returns the pairs that now have a vector, how many cards the server skipped, and
+   * the first batch failure, if there was one.
    */
   async function embedCorpus(
     embedder: Embedder,
     docs: readonly CorpusDoc[],
-  ): Promise<{ readonly pairs: { readonly doc: CorpusDoc; readonly vector: number[] }[]; readonly skipped: number }> {
+    halted: () => boolean = () => false,
+  ): Promise<{
+    readonly pairs: { readonly doc: CorpusDoc; readonly vector: number[] }[]
+    readonly skipped: number
+    readonly failure: string | undefined
+  }> {
     const wanted = new Set(docs.map(doc => contentKey(doc)))
     for (const key of [...vectors.keys()]) if (!wanted.has(key)) vectors.delete(key)
     const missing = docs.filter(doc => !vectors.has(contentKey(doc)))
-    if (missing.length > 0) {
-      const embedded = await embedder.embed(missing.map(doc => head(doc.text, EMBED_CHARS)))
-      for (const { doc, vector } of zipVectors(missing, embedded)) vectors.set(contentKey(doc), vector)
+    let added = 0
+    let failure: string | undefined
+    for (let start = 0; start < missing.length; start += EMBED_BATCH) {
+      if (halted()) break
+      const batch = missing.slice(start, start + EMBED_BATCH)
+      try {
+        const embedded = await embedder.embed(batch.map(doc => head(doc.text, EMBED_CHARS)))
+        for (const { doc, vector } of zipVectors(batch, embedded)) {
+          const key = contentKey(doc)
+          if (!vectors.has(key)) added += 1
+          vectors.set(key, vector)
+        }
+      } catch (cause) {
+        failure = cause instanceof Error ? cause.message : String(cause)
+        break
+      }
     }
     const pairs: { doc: CorpusDoc; vector: number[] }[] = []
     for (const doc of docs) {
       const vector = vectors.get(contentKey(doc))
       if (vector !== undefined) pairs.push({ doc, vector })
     }
-    return { pairs, skipped: docs.length - pairs.length }
+    warmed = pairs.length
+    total = docs.length
+    // Only a round that learned something rewrites the file: a fully cached corpus
+    // leaves it alone, so a search never pays for the cache's own write.
+    if (added > 0) await writeVectorCache(cacheFile, vectors)
+    return { pairs, skipped: docs.length - pairs.length, failure }
   }
 
   return {
@@ -275,7 +345,25 @@ export function createSearchService(deps: {
         semantic: 'embedder' in state,
         reason: 'embedder' in state ? '' : state.reason,
         embedModel: deps.plan.enabled ? deps.plan.embedModel : '',
+        warmed,
+        total,
       }
+    },
+
+    warm() {
+      let stopped = false
+      const run = async (): Promise<void> => {
+        const state = await embedderFor()
+        if (stopped || !('embedder' in state)) return
+        await loadCache()
+        // No second check for `stopped` here: `embedCorpus` re-reads it before every
+        // batch, so a stop that lands during `corpus()` still costs the endpoint nothing.
+        await embedCorpus(state.embedder, await corpus(), () => stopped)
+      }
+      // Best effort: a search reports its own degradation, so a failed warmup has no
+      // caller to answer to and must not become an unhandled rejection.
+      run().catch(() => {})
+      return () => { stopped = true }
     },
     async search(query, limit) {
       const trimmed = query.trim()
@@ -291,11 +379,15 @@ export function createSearchService(deps: {
       const vectorByPath = new Map<string, number[]>()
       if ('embedder' in state) {
         try {
+          await loadCache()
           const embedded = await state.embedder.embed([trimmed])
           const queryVector = embedded[0]
           if (queryVector === undefined) throw new Error('嵌入服务没有返回查询向量')
-          const { pairs, skipped } = await embedCorpus(state.embedder, docs)
+          const { pairs, skipped, failure } = await embedCorpus(state.embedder, docs)
           if (skipped > 0) notes.push(`嵌入服务只覆盖 ${String(pairs.length)}/${String(docs.length)} 张卡片`)
+          if (failure !== undefined) {
+            notes.push(`嵌入调用失败，已保留已嵌入的卡片（${String(pairs.length)}/${String(docs.length)}）：${failure}`)
+          }
           for (const pair of pairs) vectorByPath.set(pair.doc.path, pair.vector)
           semantic = pairs
             .map(pair => ({ doc: pair.doc, score: cosine(queryVector, pair.vector) }))

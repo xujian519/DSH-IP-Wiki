@@ -74,6 +74,8 @@ DSH_IP_WIKI_EVAL=1 pnpm exec vitest run tests/p4-eval.spec.ts
 
 各轮的实测结论与仍然红着的声明线记在 [TECH_DEBT.md](TECH_DEBT.md)。
 
+`p1-eval` 用的是**部署的配置**（`timeoutMs` 20 秒）与**真实的向量缓存**（`~/.dsh/ip-wiki/vectors.json`）：第一次跑要把 1,155 张嵌一遍并写下缓存（实测 498.5 秒），之后同一条命令约 80 秒。缓存被删掉就会重新变慢——这是它的正常代价，不是回归。
+
 ## 一次性维护脚本
 
 `scripts/import-wiki.ts`（导入 vault 的 Wiki 页）与 `scripts/merge-duplicates.ts`（批量写合并草稿）是库侧维护工具，**只生成草稿、从不直写卡片**；用法与判定口径归 [README](../README.md)。它们由 `tsc` 一起类型检查。

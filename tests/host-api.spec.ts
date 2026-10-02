@@ -138,7 +138,7 @@ describe('createHostApi', () => {
 
   it('reads the retrieval status', async () => {
     const stub = stubFetcher({ [`${ROUTE_PREFIX}/search-status`]: { ok: true, status: 200, body: { semantic: true, reason: '', embedModel: 'm' } } })
-    await expect(createHostApi(stub.fetcher).fetchSearchStatus()).resolves.toEqual({ semantic: true, reason: '', embedModel: 'm' })
+    await expect(createHostApi(stub.fetcher).fetchSearchStatus()).resolves.toEqual({ semantic: true, reason: '', embedModel: 'm', warmed: 0, total: 0 })
   })
 
   it('reports a search that failed', async () => {

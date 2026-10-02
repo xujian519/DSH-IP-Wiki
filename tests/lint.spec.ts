@@ -39,6 +39,7 @@ function card(overrides: Partial<CardDocument> & { readonly path: string }): Car
     body: '正文。',
     lawRefs: [],
     relatedConcepts: [],
+    wikiLinks: [],
     jurisdiction: 'CN',
     fromId: '',
     supersededBy: '',
@@ -141,6 +142,120 @@ describe('lintCards', () => {
       message: '孤立卡片：既没有关联卡片，也没有被任何卡片关联',
       path: 'cards/rule/lonely.md',
     }])
+  })
+
+  it('reports a target enough cards point at without the library having a card for it', () => {
+    // On the real library the head is a page the vault kept linking to but never
+    // imported as a card — 专利实务/创造性/创造性-概述与三步法框架, named by 50 cards.
+    // Ten cards is the threshold; eleven clears it, ten clears it, and two counts that
+    // tie fall back to alphabetical order.
+    const documents = [card({ path: 'cards/rule/anchor.md' })]
+    for (let index = 1; index <= 11; index += 1) {
+      documents.push(card({
+        path: `cards/rule/a-${String(index)}.md`,
+        relatedConcepts: ['cards/rule/anchor.md'],
+        wikiLinks: [
+          '创造性-概述与三步法框架',
+          ...(index <= 10 ? ['zeta-missing', 'alpha-missing'] : []),
+        ],
+      }))
+    }
+    const report = lintCards(documents, { indexTotalCards: documents.length }, 'warning')
+    expect(report.findings).toEqual([
+      { tier: 'suggestion', code: 'wanted-card', message: '11 张卡提到、但库里没有对应的卡：创造性-概述与三步法框架', path: '' },
+      { tier: 'suggestion', code: 'wanted-card', message: '10 张卡提到、但库里没有对应的卡：alpha-missing', path: '' },
+      { tier: 'suggestion', code: 'wanted-card', message: '10 张卡提到、但库里没有对应的卡：zeta-missing', path: '' },
+    ])
+    expect(report.verdict).toBe('pass')
+  })
+
+  it('leaves a missing target out once a card answers it', () => {
+    // A card may have been created since the import wrote the link, and a target that
+    // found its card has to leave the report on its own — otherwise this rule never clears.
+    const documents = [card({ path: 'cards/rule/专利法第22条第2款.md', title: '专利法第22条第2款' })]
+    for (let index = 1; index <= 10; index += 1) {
+      documents.push(card({
+        path: `cards/rule/b-${String(index)}.md`,
+        relatedConcepts: ['cards/rule/专利法第22条第2款.md'],
+        wikiLinks: ['专利法第22条第2款'],
+      }))
+    }
+    const report = lintCards(documents, { indexTotalCards: documents.length }, 'warning')
+    expect(codes(report.findings)).toEqual([])
+  })
+
+  it('ignores a target below the threshold, an empty one, and a repeat inside one card', () => {
+    const documents = [card({ path: 'cards/rule/anchor.md' })]
+    for (let index = 1; index <= 4; index += 1) {
+      documents.push(card({
+        path: `cards/rule/c-${String(index)}.md`,
+        relatedConcepts: ['cards/rule/anchor.md'],
+        wikiLinks: ['被反复提起的目标', ''],
+      }))
+    }
+    documents.push(card({
+      path: 'cards/rule/c-repeat.md',
+      relatedConcepts: ['cards/rule/anchor.md'],
+      // Six mentions inside one card are still one card pointing at the target, so this
+      // counts as five. Counting the repeats would put it at ten and let one card's
+      // enthusiasm alone trip the rule.
+      wikiLinks: Array.from({ length: 6 }, () => '被反复提起的目标').concat(''),
+    }))
+    const report = lintCards(documents, { indexTotalCards: documents.length }, 'warning')
+    expect(codes(report.findings)).toEqual([])
+  })
+
+  it('reports a domain no live reference crosses and leaves the others alone', () => {
+    const documents: CardDocument[] = []
+    // 孤岛: five cards that reference each other and nothing else. One of those
+    // references lands on a superseded card, which is not the live library and so does
+    // not carry the island back into the rest of the graph.
+    documents.push(card({
+      path: 'cards/rule/retired.md',
+      domainL2: '桥梁',
+      status: 'deprecated',
+      supersededBy: 'cards/rule/bridge.md',
+    }))
+    for (let index = 1; index <= 5; index += 1) {
+      const peer = index === 1 ? 2 : 1
+      documents.push(card({
+        path: `cards/rule/island-${String(index)}.md`,
+        domainL2: '孤岛',
+        relatedConcepts: index === 1
+          ? [`cards/rule/island-${String(peer)}.md`, 'cards/rule/retired.md']
+          : [`cards/rule/island-${String(peer)}.md`],
+      }))
+    }
+    // 腹地 reaches into 桥梁, so neither of those is an island.
+    for (let index = 1; index <= 5; index += 1) {
+      documents.push(card({
+        path: `cards/rule/main-${String(index)}.md`,
+        domainL2: '腹地',
+        relatedConcepts: index === 1
+          ? ['cards/rule/bridge.md']
+          : [`cards/rule/main-${String(index === 2 ? 3 : 2)}.md`],
+      }))
+    }
+    documents.push(card({ path: 'cards/rule/bridge.md', domainL2: '桥梁' }))
+    // 小域 is isolated too, but two cards is below the floor; small-a also points at
+    // itself, which is not a reference to anything else.
+    documents.push(card({ path: 'cards/rule/small-a.md', domainL2: '小域', relatedConcepts: ['cards/rule/small-b.md', 'cards/rule/small-a.md'] }))
+    documents.push(card({ path: 'cards/rule/small-b.md', domainL2: '小域' }))
+    const report = lintCards(documents, { indexTotalCards: documents.length }, 'warning')
+    expect(report.findings).toEqual([{
+      tier: 'suggestion',
+      code: 'island-domain',
+      message: '5 张卡的域与其它域没有任何互链（domain_l2）：孤岛',
+      path: '',
+    }])
+  })
+
+  it('says nothing about isolation in a library with a single domain', () => {
+    // With one domain there is no other domain to be cut off from: the statement would
+    // be vacuously true for every library nobody has classified yet.
+    const documents = Array.from({ length: 6 }, (_, index) => card({ path: `cards/rule/only-${String(index)}.md` }))
+    const report = lintCards(documents, { indexTotalCards: documents.length }, 'warning')
+    expect(codes(report.findings)).toEqual(['orphan-card', 'orphan-card', 'orphan-card', 'orphan-card', 'orphan-card', 'orphan-card'])
   })
 
   it('reports an index that is missing or out of step', () => {
