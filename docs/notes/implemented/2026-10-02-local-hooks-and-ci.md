@@ -61,5 +61,5 @@ Status: implemented
 - **门禁第一次有了执行者**：提交前有窄检查，push 前有类型检查，push / PR 有全量五道。`pnpm run check` 从"自觉"变成"兜底"。
 - **成本**：每个提交多约 0.2 秒（lint 暂存文件）、每次 push 多约 2 秒（typecheck）。
 - **新增一条构建期依赖**：`lefthook` 进 devDependencies，不进 Client 单文件包，也不进运行时。
-- **CI 还没有真的跑过**：仓库没有远端，所以这个 workflow 一次都没执行过——"CI 绿"目前只是"同一条命令在本地绿"（[台账](../../TECH_DEBT.md)）。
+- **CI 同日第一次执行并通过**：接上远端后，`check` 在 ubuntu-latest 上 success（运行 `37028718041`，30 秒）——"CI 绿"不再只是"同一条命令在本地绿"（[台账](../../TECH_DEBT.md)）。
 - **未做**：平台矩阵（只在 ubuntu + node 22）；`pnpm run build` 与 `client-shape` 门禁不在 CI 里。两条都记在[台账](../../TECH_DEBT.md)。

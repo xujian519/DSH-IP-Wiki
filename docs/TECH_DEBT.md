@@ -16,9 +16,9 @@
 
 其余三条 effect（路由、工具、指引段）仍然只断言"注册了什么、清理函数被调用过"，没有断言"卸载后真的不再生效"（`tests/host-entry.spec.ts` 的 stub 把 `disposed` 记成 `route` / `tool:<name>` / `guidance`，那是 stub 自己写的标记，不是被测对象的行为）。
 
-### CI 与钩子已接线，但 CI 一次都没跑过
+### CI 曾经一次都没跑过（已修）
 
-2026-10-02 起有了本地钩子（`lefthook.yml`：pre-commit 暂存文件 lint + 空白、pre-push typecheck）与 CI（`.github/workflows/check.yml`：一条 job 跑 `pnpm run check`），仓库也 `git init` 了（[决策记录](notes/implemented/2026-10-02-local-hooks-and-ci.md)）。但**仓库还没有远端**，那个 workflow 从未执行过——目前的"CI 绿"只是"同一条命令在本地绿"。仍然缺平台矩阵（只有 ubuntu + node 22），`pnpm run build` 的 `client-shape` 门禁也不在 CI 覆盖面内。
+2026-10-02 起有了本地钩子（`lefthook.yml`：pre-commit 暂存文件 lint + 空白、pre-push typecheck）与 CI（`.github/workflows/check.yml`：一条 job 跑 `pnpm run check`），仓库也 `git init` 了（[决策记录](notes/implemented/2026-10-02-local-hooks-and-ci.md)）。同日接上远端，**workflow 第一次执行就通过**：`check` 在 ubuntu-latest 上 success（运行 `37028718041`，30 秒，`pnpm install --frozen-lockfile` 与 `pnpm run check` 逐步全绿）。这只是第一次执行，仍然缺平台矩阵（只有 ubuntu + node 22），`pnpm run build` 的 `client-shape` 门禁也不在 CI 覆盖面内。
 
 ### 语义级曾经在真机上从未执行过（已修）
 
@@ -87,3 +87,7 @@
 - **4 组同题不同文的 `duplicate-title` 改标题**：未做，待决。
 - **"同题不同文"的已确认卡是否要把两段答案并成一段**：需要写文字，机械合并做不到，待决。
 - **检索声明线**：命中@3 尚差 2 题（16/20 对声明线 18/20），是否接受现状由人决定。
+- **仓库里的真实卡片身份信息待脱敏**：真实卡片**文件**从未入库（历史 117 个路径里没有 `cards/`、`raw/`、`snapshots/`），入库的是卡片的身份信息与一套真实业务问题。
+  - 范围：`tests/p1-cases.ts`（20 条真实业务问题 + 每题答案卡的真名与短 ID）、`tests/p2-eval.spec.ts`（3 张真卡的目标路径与标题，外加带人名的素材路径与一条 `client-material` 素材）、本篇「事故」一节与[删除审计线](notes/implemented/2026-09-29-delete-audit-line.md)（带哈希的真卡文件名）、[导入映射](notes/implemented/2026-09-29-wiki-import-mapping.md)、[两条门禁规则](notes/implemented/2026-10-02-two-lint-rules.md)、[双链的两种 Obsidian 写法](notes/implemented/2026-10-02-obsidian-wikilink-forms.md)、[检索分级与降级](notes/implemented/2026-09-29-retrieval-stages-and-degradation.md)里的真库规模与业务域。
+  - 枚举（三条都在 2026-10-02 实测过；`git grep` 是 POSIX ERE，别用 `\S`/`\s`）：`git grep -nE 'cards/[a-z]+/[^ ]+-[0-9a-f]{8}\.md|/Users/[a-z]+/' -- .`（真卡文件名与本机绝对路径，20 行）、`git grep -nE '^[[:space:]]*(target|title|sourceRef):' -- tests/`（评测里写死的真卡标题、目标路径与来源）、`git grep -nE 'wanted: \[' -- tests/p1-cases.ts`（每题的问题与答案卡 ID，20 行）。**故意不在这里转录具体标题与 ID**——转录会让这条台账自己也需要脱敏。
+  - 处置：标题 / 短 ID / 问题集换成脱敏合成值，与 README 等 9 处本机绝对路径同一批做。远端已于 2026-10-02 转 private 作临时屏障，时机定在插件成熟后统一进行。

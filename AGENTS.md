@@ -49,6 +49,6 @@
 
 ## 还没有做到的事
 
-见 [docs/TECH_DEBT.md](docs/TECH_DEBT.md)：真机浏览器验证、dispose 断言（只做过一条，见下）、文档字数预算、CI 尚未真正跑过、精排侧怎么改还没有定论等都在那里，别当成已完成。
+见 [docs/TECH_DEBT.md](docs/TECH_DEBT.md)：真机浏览器验证、dispose 断言（只做过一条，见下）、文档字数预算、CI 只有 ubuntu + node 22 单一矩阵、仓库里的真实卡片身份信息待脱敏、精排侧怎么改还没有定论等都在那里，别当成已完成。
 
 > 语义检索冷启动这条**已经修了**（分批 + 库外缓存 + 启动预热，真库实测 498.5 s → 79.7 s，决策记录在[向量缓存落库外与启动预热](docs/notes/implemented/2026-10-02-vector-cache-outside-library.md)）；不要照着旧台账再去实施一遍。
