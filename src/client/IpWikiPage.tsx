@@ -92,6 +92,22 @@ function linkResolver(tree: LibraryTree | null): (name: string) => string | unde
   return name => byName.get(name)
 }
 
+/** 路径到标题。空标题与树上没有的路径都交给短路径。 */
+function titlesByPath(tree: LibraryTree | null): ReadonlyMap<string, string> {
+  const titles = new Map<string, string>()
+  for (const branch of tree?.branches ?? []) {
+    for (const group of branch.groups) {
+      for (const card of group.cards) titles.set(card.path, card.title)
+    }
+  }
+  return titles
+}
+
+/** 路径最后一段。没有卡片标题时，将弃用列表用它代替整段路径。 */
+function shortPath(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1)
+}
+
 /**
  * Tone of one gate chip.
  *
@@ -410,22 +426,60 @@ function DiffView({ diff, t }: { readonly diff: readonly DiffLine[]; readonly t:
   )
 }
 
-/** The reader pane for one draft: what it would change, and the two decisions. */
-function DraftReader({ view, t, busy, onConfirm, onDiscard, onOpenCard }: {
+/**
+ * 阅读器头上的种类芯片。
+ *
+ * 用词与队列短标签同一套（卡 / 合并），合并带条数；状态确认用全文并加 warn。
+ * 队列行仍走 `draftKindLabel`，不套这个芯片。
+ */
+function draftKindChip(draft: CardDraft, t: Messages): ReactNode {
+  switch (draft.kind) {
+    case 'card':
+      return <span className="iw-chip iw-chip-kind">{t.draftKindCard}</span>
+    case 'merge':
+      return <span className="iw-chip iw-chip-kind">{`${t.draftKindMerge} · ${String(draft.supersedes.length)}`}</span>
+    case 'status':
+      return <span className="iw-chip iw-chip-kind iw-chip-warn">{t.statusConfirm}</span>
+  }
+}
+
+/** 将弃用一行的可见文字：树上有标题就用标题，否则用短路径。 */
+function supersedeLabel(path: string, titles: ReadonlyMap<string, string>): string {
+  const title = titles.get(path) ?? ''
+  return title === '' ? shortPath(path) : title
+}
+
+/**
+ * 一份草稿的阅读区。
+ *
+ * 先看种类、备注和差异，确认落库在差异下面。作废在标题行，第一下只展开确认条。
+ */
+function DraftReader({ view, titles, t, busy, onConfirm, onDiscard, onOpenCard }: {
   readonly view: DraftView
+  readonly titles: ReadonlyMap<string, string>
   readonly t: Messages
   readonly busy: boolean
   readonly onConfirm: () => void
   readonly onDiscard: () => void
   readonly onOpenCard: (path: string) => void
 }): ReactNode {
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false)
   const draft = view.draft
   return (
     <article>
-      <h2 className="iw-read-title">{draft.title === '' ? draft.target : draft.title}</h2>
-      <div className="iw-meta">
-        {draft.kind === 'merge' ? <Chip label={t.merge} value={String(draft.supersedes.length)} tone="iw-chip-warn" /> : null}
-        {draft.kind === 'status' ? <Chip label={t.statusConfirm} value="" tone="iw-chip-warn" /> : null}
+      <div className="iw-read-actions">
+        <h2 className="iw-read-title">{draft.title === '' ? draft.target : draft.title}</h2>
+        <button
+          type="button"
+          className="iw-btn iw-btn-danger"
+          disabled={busy}
+          onClick={() => { setConfirmingDiscard(true) }}
+        >
+          {t.discard}
+        </button>
+      </div>
+      <div className="iw-meta iw-draft-meta">
+        {draftKindChip(draft, t)}
         <Chip label={t.type} value={CARD_TYPE_LABEL[draft.type]} />
         <span className="iw-chip">{t.draftTarget}<b>{draft.target}</b></span>
         <span className={draft.policy === 'local-only' ? 'iw-chip iw-chip-warn' : 'iw-chip'}>
@@ -435,30 +489,40 @@ function DraftReader({ view, t, busy, onConfirm, onDiscard, onOpenCard }: {
         <span className="iw-chip">{view.existing ? t.willReplace : t.willCreate}</span>
         <span className="iw-chip">{t.diffTitle}<b>{`+${String(view.counts.added)} / -${String(view.counts.removed)}`}</b></span>
       </div>
+      {!confirmingDiscard ? null : (
+        <div className="iw-confirm iw-confirm-stack">
+          <span className="iw-confirm-ask">{t.discardAsk}</span>
+          <div className="iw-confirm-actions">
+            <button type="button" className="iw-btn iw-btn-danger" disabled={busy} onClick={onDiscard}>{t.discardYes}</button>
+            <button type="button" className="iw-btn iw-btn-quiet" onClick={() => { setConfirmingDiscard(false) }}>{t.cancel}</button>
+          </div>
+        </div>
+      )}
       {draft.note === '' ? null : <div className="iw-hint">{draft.note}</div>}
       {draft.sourceRef === '' ? null : <div className="iw-hint">{`${t.source}：${draft.sourceRef}`}</div>}
       {draft.supersedes.length === 0 ? null : (
-        <section>
-          <div className="iw-section-title">{t.mergeAbsorb}（{draft.supersedes.length}）</div>
-          {draft.supersedes.map(path => (
-            <button
-              key={path}
-              type="button"
-              title={path}
-              className="iw-row iw-row-line iw-row-flat"
-              onClick={() => { onOpenCard(path) }}
-            >
-              <span className="iw-row-title">{path}</span>
-            </button>
-          ))}
+        <section className="iw-supersedes">
+          <div className="iw-section-title">{`${t.mergeAbsorb} · ${String(draft.supersedes.length)}`}</div>
+          <div className="iw-supersedes-list">
+            {draft.supersedes.map(path => (
+              <button
+                key={path}
+                type="button"
+                title={path}
+                className="iw-wikilink iw-wikilink-open"
+                onClick={() => { onOpenCard(path) }}
+              >
+                {supersedeLabel(path, titles)}
+              </button>
+            ))}
+          </div>
           <div className="iw-hint">{t.mergeNote}</div>
         </section>
       )}
+      <DiffView diff={view.diff} t={t} />
       <div className="iw-actions">
         <button type="button" className="iw-btn iw-btn-primary" disabled={busy} onClick={onConfirm}>{t.confirm}</button>
-        <button type="button" className="iw-btn iw-btn-danger" disabled={busy} onClick={onDiscard}>{t.discard}</button>
       </div>
-      <DiffView diff={view.diff} t={t} />
     </article>
   )
 }
@@ -954,6 +1018,7 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
     () => ({ resolve: linkResolver(tree), open: (path: string) => { void openCard(path) } }),
     [tree, openCard],
   )
+  const titles = useMemo(() => titlesByPath(tree), [tree])
 
   /**
    * Delete one card for good. The Host clears the references other cards make to
@@ -1311,7 +1376,9 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
             />
           ) : (
             <DraftReader
+              key={selection.view.draft.id}
               view={selection.view}
+              titles={titles}
               t={t}
               busy={busy}
               onConfirm={() => { void confirmSelection(selection.view.draft.id) }}

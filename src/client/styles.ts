@@ -112,6 +112,16 @@ export function libraryStyles(): string {
   white-space: nowrap;
 }
 .iw-chip b { color: var(--dsw-alias-label-primary); font-weight: 500; font-variant-numeric: tabular-nums; }
+/* 草稿阅读器的种类芯片比同行事实大一号。文字仍是主色，状态色只留给 warn 圆点。 */
+.iw-chip-kind {
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+/* 长路径在芯片里换行，头区仍是芯片而不是键值表。种类芯片保持一行。 */
+.iw-draft-meta .iw-chip { white-space: normal; overflow-wrap: anywhere; }
+.iw-draft-meta .iw-chip-kind { white-space: nowrap; overflow-wrap: normal; }
 /* State chips state their hue as a dot; the text stays on ink, because the
    state colours sit between 2.15:1 and 4.50:1 on white as text. */
 .iw-chip-warn::before, .iw-chip-error::before, .iw-chip-ok::before {
@@ -402,7 +412,8 @@ button.iw-chip:hover { background: var(--dsw-alias-interactive-bg-hover); }
   cursor: pointer;
 }
 .iw-toc,
-.iw-related {
+.iw-related,
+.iw-supersedes {
   max-width: 40em;
   margin: 10px 0 14px;
   padding: 8px 10px;
@@ -448,6 +459,15 @@ button.iw-chip:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .iw-details summary { padding: 2px 0; color: var(--dsw-alias-label-secondary); cursor: pointer; }
 .iw-details .iw-facts { margin: 8px 0 0; }
 .iw-related-list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.iw-supersedes-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 4px;
+}
+.iw-supersedes .iw-wikilink { overflow-wrap: anywhere; max-width: 100%; text-align: left; }
+.iw-supersedes .iw-hint { margin-top: 6px; }
 .iw-related-unresolved { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.5; }
 .iw-filter { display: flex; align-items: center; gap: 6px; padding: 0; }
 .iw-filter-input {

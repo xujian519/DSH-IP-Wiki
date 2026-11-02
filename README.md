@@ -140,7 +140,7 @@ tsx scripts/import-wiki.ts --root <库根> --batch 1                   # 写这�
 ```
 素材（PDF / 图片 OCR / 网页 / 会话）→ 归纳成卡片文本 → 草稿区 .dsh-ip-wiki/drafts/
    → 面板里看差异（+/- 逐行） → 你点「确认落库」 → 写进 cards/ → 出现在检索结果里
-                              → 你点「作废」   → 只进 archive/，cards/ 不变
+                              → 你点「作废」，再点「继续」 → 只进 archive/，cards/ 不变
    → 落库后想撤：「回滚」把被替换的卡片按字节恢复，或删掉这次新建的卡片
 ```
 

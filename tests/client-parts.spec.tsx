@@ -31,6 +31,13 @@ describe('dictionaries', () => {
     expect(dictionaryFor('fr').panel).toBe('IP 知识库')
   })
 
+  it('asks before a discard in both languages', () => {
+    expect(zh.discardAsk).toContain('不写入卡片')
+    expect(zh.discardYes).toBe('继续')
+    expect(en.discardAsk).toContain('without writing a card')
+    expect(en.discardYes).toBe('Continue')
+  })
+
   it('registers under the plugin namespace', () => {
     expect(NAMESPACE).toBe('dsh-ip-wiki')
   })
@@ -135,6 +142,20 @@ describe('libraryStyles', () => {
     expect(row.slice(0, row.indexOf('}'))).toContain('min-height: 30px')
     // author display:flex 会盖过 [hidden]，必须单独收回，详情收起时第二行才真的不占位。
     expect(css).toContain('.iw-status-extra[hidden] { display: none; }')
+  })
+
+  it('keeps the draft kind chip and the supersede list apart from a tree row', () => {
+    const css = libraryStyles()
+    expect(css).toContain('.iw-chip-kind')
+    const box = css.slice(css.indexOf('.iw-toc,'))
+    const boxRule = box.slice(0, box.indexOf('}'))
+    expect(boxRule).toContain('.iw-supersedes')
+    expect(boxRule).toContain('border: 0.5px solid var(--dsw-alias-border-l1)')
+    expect(boxRule).toContain('border-radius: 12px')
+    const wrap = css.slice(css.indexOf('.iw-draft-meta .iw-chip {'))
+    expect(wrap.slice(0, wrap.indexOf('}'))).toContain('white-space: normal')
+    const list = css.slice(css.indexOf('.iw-supersedes-list {'))
+    expect(list.slice(0, list.indexOf('}'))).toContain('flex-direction: column')
   })
 
   it('gives a search hit its own card and keeps searching distinct from empty', () => {
