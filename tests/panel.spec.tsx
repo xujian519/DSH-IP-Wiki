@@ -338,10 +338,11 @@ describe('LibraryPanel', () => {
   it('keeps the status strip to the totals until details is opened', async () => {
     const view = await mount(<LibraryPanel api={stubApi()} localeId="zh-CN" />)
     const main = view.one('.iw-status-main')
-    // 默认档只留总数、未确认、漂移和待审。卡型、报告、已确认和索引时间在详情里。
+    // 默认档留总数、未确认、漂移、门禁摘要和待审。卡型、报告、已确认和索引时间在详情里。
     expect(main.textContent).toContain('卡片2')
     expect(main.textContent).toContain('未确认1')
     expect(main.textContent).toContain('索引与卡片一致')
+    expect(main.textContent).toContain('门禁未通过 · 警告 2')
     expect(main.textContent).toContain('待审1')
     expect(main.textContent).not.toContain('规则卡')
     expect(main.textContent).not.toContain('整理报告')
@@ -739,17 +740,18 @@ describe('LibraryPanel', () => {
     expect(text).toContain('broken-link')
     expect(text).toContain('关联卡片指向不存在的卡：old-9')
     expect(text).toContain('库级')
-    expect(view.all('div.iw-tier-warning')).toHaveLength(2)
+    expect(view.all('.iw-tier-warning')).toHaveLength(2)
+    expect(view.text()).not.toMatch(/✅|❌/u)
     // 422 findings in the real library are mostly the least serious tier, so it
     // stays folded until it is asked for.
-    expect(view.all('div.iw-tier-suggestion')).toHaveLength(0)
+    expect(view.all('.iw-tier-suggestion')).toHaveLength(0)
     const suggestion = defined(view.all('button.iw-tier-head').find(head => head.getAttribute('data-tier') === 'suggestion'))
     expect(suggestion.getAttribute('aria-expanded')).toBe('false')
     await view.click(suggestion)
-    expect(view.all('div.iw-tier-suggestion')).toHaveLength(1)
+    expect(view.all('.iw-tier-suggestion')).toHaveLength(1)
     expect(suggestion.getAttribute('aria-expanded')).toBe('true')
     await view.click(suggestion)
-    expect(view.all('div.iw-tier-suggestion')).toHaveLength(0)
+    expect(view.all('.iw-tier-suggestion')).toHaveLength(0)
     expect(view.all('span.iw-chip-error').length).toBeGreaterThan(0)
     await view.unmount()
   })
@@ -783,9 +785,84 @@ describe('LibraryPanel', () => {
       verdict: 'pass',
     }
     const view = await mount(<LibraryPanel api={stubApi({ lint: clean })} localeId="zh-CN" />)
+    const chip = defined(view.one('header.iw-status button.iw-chip'))
+    expect(chip.textContent).toBe('门禁通过')
+    expect(chip.className).toContain('iw-chip-ok')
+    expect(view.text()).not.toMatch(/✅|❌/u)
     await view.click(defined(view.all('button.iw-row').find(button => button.textContent?.includes('通过'))))
     expect(view.text()).toContain('没有发现任何问题')
     expect(view.all('span.iw-chip-ok').length).toBeGreaterThan(0)
+    await view.unmount()
+  })
+
+  it('summarises a failing gate on the status strip and opens the reader from the chip', async () => {
+    const api = stubApi()
+    const view = await mount(<LibraryPanel api={api} localeId="zh-CN" />)
+    const chip = defined(view.one('header.iw-status button.iw-chip'))
+    expect(chip.textContent).toBe('门禁未通过 · 警告 2')
+    expect(chip.className).toContain('iw-chip-warn')
+    expect(chip.className).not.toContain('iw-chip-error')
+    expect(chip.textContent).not.toContain('suggestion')
+    const gateRow = defined(view.all('button.iw-row').find(row => row.textContent?.includes('suggestion')))
+    expect(gateRow.textContent).not.toMatch(/✅|❌/u)
+    expect(gateRow.querySelector('.iw-chip-warn')).not.toBeNull()
+    await view.click(chip)
+    expect(view.text()).toContain('broken-link')
+    await view.unmount()
+  })
+
+  it('drops zero counts from the gate chip and reserves the error dot for critical findings', async () => {
+    const base: LintReport = {
+      scanned: 2,
+      findings: [],
+      counts: { critical: 1, warning: 3, suggestion: 9 },
+      failOn: 'warning',
+      verdict: 'fail',
+    }
+    const withBoth = await mount(<LibraryPanel api={stubApi({ lint: base })} localeId="zh-CN" />)
+    const bothChip = defined(withBoth.one('header.iw-status button.iw-chip'))
+    expect(bothChip.textContent).toBe('门禁未通过 · 严重 1 · 警告 3')
+    expect(bothChip.className).toContain('iw-chip-error')
+    expect(bothChip.textContent).not.toContain('9')
+    await withBoth.unmount()
+
+    const withCritical = await mount(<LibraryPanel api={stubApi({
+      lint: { ...base, counts: { critical: 2, warning: 0, suggestion: 4 } },
+    })} localeId="zh-CN" />)
+    const criticalChip = defined(withCritical.one('header.iw-status button.iw-chip'))
+    expect(criticalChip.textContent).toBe('门禁未通过 · 严重 2')
+    expect(criticalChip.className).toContain('iw-chip-error')
+    await withCritical.unmount()
+
+    const withNeither = await mount(<LibraryPanel api={stubApi({
+      lint: { ...base, counts: { critical: 0, warning: 0, suggestion: 5 } },
+    })} localeId="zh-CN" />)
+    const neitherChip = defined(withNeither.one('header.iw-status button.iw-chip'))
+    expect(neitherChip.textContent).toBe('门禁未通过')
+    expect(neitherChip.className).toContain('iw-chip-warn')
+    await withNeither.unmount()
+  })
+
+  it('opens the card a finding names and leaves a library-wide finding inert', async () => {
+    const api = stubApi()
+    const view = await mount(<LibraryPanel api={api} localeId="zh-CN" />)
+    await view.click(defined(view.one('header.iw-status button.iw-chip')))
+    const libraryWide = defined(view.all('.iw-finding').find(row => row.textContent?.includes('库级')))
+    expect(libraryWide.tagName).toBe('DIV')
+    await view.click(libraryWide)
+    expect(api.calls.some(call => call.startsWith('card:'))).toBe(false)
+    const linked = defined(view.all('button.iw-finding').find(row => row.textContent?.includes(CARD_A.path)))
+    await view.click(linked)
+    expect(api.calls).toContain(`card:${CARD_A.path}`)
+    expect(view.text()).toContain('第一步')
+    await view.unmount()
+  })
+
+  it('uses the English gate summary for an English locale', async () => {
+    const view = await mount(<LibraryPanel api={stubApi()} localeId="en-US" />)
+    expect(view.one('header.iw-status button.iw-chip').textContent).toBe('Gate failed · warning 2')
+    const gateRow = defined(view.all('button.iw-row').find(row => row.textContent?.includes('suggestion')))
+    expect(gateRow.textContent).not.toMatch(/✅|❌/u)
     await view.unmount()
   })
 
@@ -793,6 +870,8 @@ describe('LibraryPanel', () => {
     const view = await mount(<LibraryPanel api={stubApi({ failLint: '门禁读取失败' })} localeId="zh-CN" />)
     expect(view.text()).toContain('门禁读取失败')
     expect(view.text()).toContain('正在读取…')
+    expect(view.all('header.iw-status button.iw-chip')).toHaveLength(0)
+    expect(view.text()).not.toContain('门禁未通过')
     await view.unmount()
   })
 
@@ -896,6 +975,7 @@ describe('LibraryPanel', () => {
     await view.click(defined(view.all('button.iw-row')[0]))
     await view.click(defined(view.all('button.iw-btn').find(button => button.textContent === '确认落库')))
     expect(api.calls).toContain('confirm:d1')
+    expect(api.calls.filter(call => call === 'lint:warning')).toHaveLength(2)
     expect(view.text()).toContain('已落库')
     expect(view.text()).toContain('cards/rule/new.md')
     await view.click(defined(view.all('button.iw-btn').find(button => button.textContent === '回滚')))
@@ -937,6 +1017,7 @@ describe('LibraryPanel', () => {
     await view.click(defined(view.all('button.iw-btn').find(button => button.textContent === '继续')))
     expect(api.calls).toContain('confirm:d1')
     expect(api.calls).toContain('confirm:d2')
+    expect(api.calls.filter(call => call === 'lint:warning')).toHaveLength(2)
     expect(view.text()).toContain('本批已落库')
     expect(view.text()).toContain('2 张卡')
     await view.click(defined(view.all('button.iw-btn').find(button => button.textContent === '回滚')))
@@ -958,6 +1039,7 @@ describe('LibraryPanel', () => {
     const text = view.text()
     expect(text).toContain('d2 落库失败')
     expect(text).toContain('本批中断，已落库 1 张卡')
+    expect(api.calls.filter(call => call === 'lint:warning')).toHaveLength(1)
     expect(text).toContain('1 张卡')
     await view.click(defined(view.all('button.iw-btn').find(button => button.textContent === '回滚')))
     expect(api.calls).toContain('revert:d1')

@@ -34,6 +34,21 @@ describe('dictionaries', () => {
   it('registers under the plugin namespace', () => {
     expect(NAMESPACE).toBe('dsh-ip-wiki')
   })
+
+  it('names the gate strip apart from a lifecycle draft and a pending draft', () => {
+    expect(zh.lintStripPass).toBe('门禁通过')
+    expect(zh.lintStripFail).toBe('门禁未通过')
+    expect(zh.lintStripCritical).toBe('严重')
+    expect(zh.lintStripWarning).toBe('警告')
+    expect(en.lintStripPass).toBe('Gate passed')
+    expect(en.lintStripFail).toBe('Gate failed')
+    expect(en.lintStripCritical).toBe('critical')
+    expect(en.lintStripWarning).toBe('warning')
+    expect(zh.statusDraft).toBe('草稿')
+    expect(zh.drafts).toBe('待确认草稿')
+    expect(en.statusDraft).toBe('Draft')
+    expect(en.drafts).toBe('Pending drafts')
+  })
 })
 
 describe('libraryStyles', () => {

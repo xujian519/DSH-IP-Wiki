@@ -125,6 +125,12 @@ export function libraryStyles(): string {
 .iw-chip-warn::before { background: var(--dsw-alias-state-warn-primary); }
 .iw-chip-error::before { background: var(--dsw-alias-state-error-primary); }
 .iw-chip-ok::before { background: var(--dsw-alias-state-success-primary); }
+/* The gate summary on the status strip is a chip that opens the reader. */
+button.iw-chip {
+  font-family: inherit;
+  cursor: pointer;
+}
+button.iw-chip:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .iw-spacer { flex: 1; }
 .iw-btn {
   padding: 5px 12px;
@@ -158,7 +164,7 @@ export function libraryStyles(): string {
 .iw-btn-danger:hover { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent); }
 .iw-btn:disabled { opacity: 0.55; cursor: default; }
 .iw-btn:disabled:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent); }
-.iw-input:focus-visible, .iw-btn:focus-visible, .iw-status-toggle:focus-visible, .iw-row:focus-visible, .iw-group-head:focus-visible, .iw-hit-open:focus-visible, .iw-hit-source summary:focus-visible {
+.iw-input:focus-visible, .iw-btn:focus-visible, .iw-status-toggle:focus-visible, .iw-row:focus-visible, .iw-group-head:focus-visible, .iw-hit-open:focus-visible, .iw-hit-source summary:focus-visible, button.iw-chip:focus-visible, button.iw-finding:focus-visible {
   outline: 2px solid var(--dsw-alias-brand-primary);
   outline-offset: 1px;
 }
@@ -530,6 +536,19 @@ export function libraryStyles(): string {
 .iw-finding-head { display: block; font-weight: 500; font-variant-numeric: tabular-nums; }
 .iw-finding-path { display: block; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
 .iw-finding-message { display: block; }
+/* A finding that names a card is a button; a library-wide finding stays a div. */
+button.iw-finding {
+  width: 100%;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.iw-finding:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .iw-diff-same { color: var(--dsw-alias-label-secondary); }
 /* The diff is the only thing a reviewer reads before confirming, and success
    green is 2.28:1 on white: the sign in the row carries the direction, so the
