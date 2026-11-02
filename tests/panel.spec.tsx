@@ -357,6 +357,9 @@ describe('LibraryPanel', () => {
     await view.click(defined(row))
     expect(view.text()).toContain('待人工确认')
     expect(view.text()).not.toContain('/vault/cards/rule-1.md')
+    // No related ids and fewer than two headings: neither block is rendered.
+    expect(view.all('section.iw-related')).toHaveLength(0)
+    expect(view.all('details.iw-toc')).toHaveLength(0)
     await view.unmount()
   })
 
@@ -1004,8 +1007,17 @@ describe('LibraryPanel', () => {
     const view = await mount(<LibraryPanel api={api} localeId="zh-CN" />)
     await expandGroups(view)
     await view.click(defined(view.all('button.iw-row').find(button => button.textContent?.includes('创造性判断的三步法'))))
-    await view.click(defined(view.all('button.iw-btn').find(button => button.textContent === '删除')))
-    expect(view.text()).toContain('此操作不可回滚')
+    const titleRow = view.one('.iw-read .iw-read-actions')
+    expect(titleRow.querySelector('h2.iw-read-title')?.textContent).toBe(CARD_A.title)
+    const ask = titleRow.querySelector('button')
+    expect(ask?.textContent).toBe('删除')
+    expect(ask?.className).toContain('iw-btn-danger')
+    await view.click(defined(ask))
+    const confirm = view.one('.iw-read .iw-confirm')
+    expect(confirm.className).toContain('iw-confirm-stack')
+    expect(confirm.querySelector('.iw-confirm-ask')?.textContent).toContain('此操作不可回滚')
+    expect(confirm.querySelectorAll('.iw-confirm-actions button')).toHaveLength(2)
+    expect(confirm.querySelector('.iw-confirm-actions .iw-btn-danger')?.textContent).toBe('永久删除')
     expect(api.calls).not.toContain(`delete:${CARD_A.path}`)
     await view.click(defined(view.all('button.iw-btn').find(button => button.textContent === '永久删除')))
     expect(api.calls).toContain(`delete:${CARD_A.path}`)
@@ -1102,7 +1114,8 @@ describe('LibraryPanel', () => {
     const view = await mount(<LibraryPanel api={api} localeId="zh-CN" />)
     await expandGroups(view)
     await view.click(defined(view.all('button.iw-row').find(button => button.textContent?.includes('创造性判断的三步法'))))
-    expect(view.text()).toContain('相关卡片')
+    expect(view.text()).toContain('相关卡片 · 1')
+    expect(view.text()).not.toContain('不在库内')
     // The id axis of the resolver: `related_concepts` holds ids, not page names.
     await view.click(defined(view.all('button.iw-wikilink-open')[0]))
     expect(base.calls).toContain(`card:${CARD_B.path}`)
@@ -1161,13 +1174,55 @@ describe('LibraryPanel', () => {
     await expandGroups(view)
     await view.click(defined(view.all('button.iw-row').find(button => button.textContent?.includes('创造性判断的三步法'))))
     expect(view.text()).toContain('本篇目录')
+    const toc = view.one('details.iw-toc')
+    expect(toc.hasAttribute('open')).toBe(true)
     expect(view.all('button.iw-toc-item')).toHaveLength(2)
     // The title heading is neither rendered a second time nor listed.
     expect(view.all('h3.iw-md-h1')).toHaveLength(0)
     expect(view.all('h4.iw-md-h2')).toHaveLength(2)
     await view.click(defined(view.all('button.iw-toc-item')[1]))
-    // A related id the library does not hold is shown as text, not as a control.
-    expect(view.all('span.iw-wikilink')).toHaveLength(1)
+    // A related id the library does not hold is text plus the unresolved note,
+    // never a control.
+    const unresolved = view.one('span.iw-related-unresolved')
+    expect(unresolved.textContent).toContain('missing-1')
+    expect(unresolved.textContent).toContain('不在库内')
+    expect(view.all('button.iw-wikilink-open')).toHaveLength(0)
+    await view.unmount()
+  })
+
+  it('counts related cards in English and marks ids the library does not hold', async () => {
+    const view = await mount(<LibraryPanel api={stubApi()} localeId="en-US" />)
+    await expandGroups(view)
+    await view.click(defined(view.all('button.iw-row').find(button => button.textContent?.includes('创造性判断的三步法'))))
+    expect(view.text()).toContain('Related · 2')
+    expect(view.all('span.iw-related-unresolved')).toHaveLength(2)
+    expect(view.text()).toContain('not in library')
+    expect(view.all('section.iw-related button')).toHaveLength(0)
+    await view.unmount()
+  })
+
+  it('keeps delete disabled while a refresh is in flight', async () => {
+    const base = stubApi()
+    let reads = 0
+    const api: HostApi = {
+      ...base,
+      fetchTree: () => {
+        reads += 1
+        return reads > 1 ? new Promise<LibraryTree>(() => {}) : Promise.resolve(TREE)
+      },
+    }
+    const view = await mount(<LibraryPanel api={api} localeId="zh-CN" />)
+    await expandGroups(view)
+    await view.click(defined(view.all('button.iw-row').find(button => button.textContent?.includes('创造性判断的三步法'))))
+    const deleteButton = (): HTMLButtonElement => {
+      const found = view.one('.iw-read .iw-read-actions button')
+      if (!(found instanceof HTMLButtonElement)) throw new Error('expected the delete button')
+      return found
+    }
+    expect(deleteButton().disabled).toBe(false)
+    await view.click(defined(view.all('button.iw-btn').find(button => button.textContent === '刷新')))
+    expect(deleteButton().disabled).toBe(true)
+    expect(deleteButton().className).toContain('iw-btn-danger')
     await view.unmount()
   })
 })
