@@ -2,9 +2,10 @@
  * The IP knowledge library panel.
  *
  * One screen holds everything the card library has: the status strip that says
- * where the library is and whether its derived index agrees with the cards, the
- * tree that groups cards by kind and domain beside the report list, and the reader
- * that renders the selected card, report, or pending draft.
+ * where the library is, whether its derived index agrees with the cards, and
+ * whether the quality gate currently passes; the tree that groups cards by kind
+ * and domain beside the report list; and the reader that renders the selected
+ * card, report, pending draft, or gate report.
  *
  * The panel reads the library and confirms what is already waiting as a draft. It
  * never invents a draft of its own: every card write here goes through the same
@@ -91,6 +92,41 @@ function linkResolver(tree: LibraryTree | null): (name: string) => string | unde
   return name => byName.get(name)
 }
 
+/**
+ * Tone of one gate chip.
+ *
+ * Pass takes the ok dot. A fail takes the error dot only when a critical finding
+ * exists; warnings alone stay on the warn dot. The caller omits the chip entirely
+ * while the report is still unread, so the strip never flashes red.
+ */
+function gateTone(lint: LintReport): string {
+  switch (lint.verdict) {
+    case 'pass':
+      return 'iw-chip-ok'
+    case 'fail':
+      return lint.counts.critical > 0 ? 'iw-chip-error' : 'iw-chip-warn'
+  }
+}
+
+/**
+ * Copy for the status strip's gate chip.
+ *
+ * Zero counts are left out, and suggestions stay off this row: they are the bulk
+ * of a large library and the reader already lists them.
+ */
+function gateStripText(lint: LintReport, t: Messages): string {
+  switch (lint.verdict) {
+    case 'pass':
+      return t.lintStripPass
+    case 'fail': {
+      const parts = [t.lintStripFail]
+      if (lint.counts.critical > 0) parts.push(`${t.lintStripCritical} ${String(lint.counts.critical)}`)
+      if (lint.counts.warning > 0) parts.push(`${t.lintStripWarning} ${String(lint.counts.warning)}`)
+      return parts.join(' · ')
+    }
+  }
+}
+
 /** The drift chip's copy and tone. */
 function driftOf(drift: IndexDrift, t: Messages): { text: string; tone: string } {
   switch (drift) {
@@ -157,10 +193,16 @@ function Fact({ name, value }: { readonly name: string; readonly value: string }
 /**
  * 状态条两档。
  *
- * 默认一行只回答「库有多大、有没有未确认、索引健不健康、有没有待审」。
+ * 默认一行回答「库有多大、有没有未确认、索引健不健康、门禁过不过、有没有待审」。
  * 卡型分项、整理报告数，以及已确认数和索引生成时间，收在「详情」里。
+ * 门禁报告还没到时不放 chip，避免在读取完成前闪红。
  */
-function StatusStrip({ status, t }: { readonly status: LibraryStatus; readonly t: Messages }): ReactNode {
+function StatusStrip({ status, lint, t, onOpenLint }: {
+  readonly status: LibraryStatus
+  readonly lint: LintReport | null
+  readonly t: Messages
+  readonly onOpenLint: () => void
+}): ReactNode {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const drift = driftOf(status.indexDrift, t)
   const unconfirmed = status.counts.byStatus['draft'] ?? 0
@@ -171,6 +213,11 @@ function StatusStrip({ status, t }: { readonly status: LibraryStatus; readonly t
         <Chip label={t.cards} value={status.counts.total} />
         {unconfirmed === 0 ? null : <Chip label={t.unconfirmed} value={unconfirmed} tone="iw-chip-warn" />}
         <span className={`iw-chip ${drift.tone}`}>{drift.text}</span>
+        {lint === null ? null : (
+          <button type="button" className={`iw-chip ${gateTone(lint)}`} onClick={onOpenLint}>
+            {gateStripText(lint, t)}
+          </button>
+        )}
         {status.needsReview.length === 0 ? null : (
           <Chip label={t.reviewStrip} value={status.needsReview.length} tone="iw-chip-warn" />
         )}
@@ -420,11 +467,12 @@ function DraftReader({ view, t, busy, onConfirm, onDiscard, onOpenCard }: {
 const LINT_TIERS: readonly LintTier[] = ['critical', 'warning', 'suggestion']
 
 /** The reader pane for one quality-gate report. */
-function LintReader({ report, t, busy, onRebuild }: {
+function LintReader({ report, t, busy, onRebuild, onOpenCard }: {
   readonly report: LintReport
   readonly t: Messages
   readonly busy: boolean
   readonly onRebuild: () => void
+  readonly onOpenCard: (path: string) => void
 }): ReactNode {
   // A large library reports hundreds of the least serious findings, so the tiers
   // are folded: the two that need a decision start open, the bulk starts closed.
@@ -476,13 +524,29 @@ function LintReader({ report, t, busy, onRebuild }: {
                   <span>{tier}</span>
                   <span className="iw-count">{inTier.length}</span>
                 </button>
-                {!isOpen ? null : inTier.map((finding, index) => (
-                  <div key={`f${tier}-${String(index)}`} className={`iw-finding iw-tier-${finding.tier}`}>
-                    <span className="iw-finding-head">{`${finding.tier} · ${finding.code}`}</span>
-                    <span className="iw-finding-path">{finding.path === '' ? t.lintLibraryWide : finding.path}</span>
-                    <span className="iw-finding-message">{finding.message}</span>
-                  </div>
-                ))}
+                {!isOpen ? null : inTier.map((finding, index) => {
+                  const className = `iw-finding iw-tier-${finding.tier}`
+                  const body = (
+                    <>
+                      <span className="iw-finding-head">{`${finding.tier} · ${finding.code}`}</span>
+                      <span className="iw-finding-path">{finding.path === '' ? t.lintLibraryWide : finding.path}</span>
+                      <span className="iw-finding-message">{finding.message}</span>
+                    </>
+                  )
+                  // An empty path is a library-wide finding: there is no card to open.
+                  return finding.path === '' ? (
+                    <div key={`f${tier}-${String(index)}`} className={className}>{body}</div>
+                  ) : (
+                    <button
+                      key={`f${tier}-${String(index)}`}
+                      type="button"
+                      className={className}
+                      onClick={() => { onOpenCard(finding.path) }}
+                    >
+                      {body}
+                    </button>
+                  )
+                })}
               </div>
             )
           })
@@ -670,13 +734,13 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
       setLanded({ ids: [id], summary: done.path })
       setSelection(null)
       setFailed(null)
-      await Promise.all([refresh(), refreshDrafts()])
+      await Promise.all([refresh(), refreshDrafts(), refreshLint()])
     } catch (cause) {
       setFailed(describe(cause))
     } finally {
       setBusy(false)
     }
-  }, [api, refresh, refreshDrafts])
+  }, [api, refresh, refreshDrafts, refreshLint])
 
   // One request per draft, in the order the list shows: each confirm backs its own
   // card up, so a batch that stops half way leaves every landed card revertible.
@@ -695,10 +759,11 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
       setLanded({ ids: done, summary: `${String(done.length)} ${t.batchUnit}` })
       setSelection(null)
       setFailed(null)
-      await Promise.all([refresh(), refreshDrafts()])
+      await Promise.all([refresh(), refreshDrafts(), refreshLint()])
     } catch (cause) {
       // The refresh clears the failure banner, so what went wrong is set after it:
       // a batch that stopped half way has to say so and stay revertible.
+      // The gate is re-read only after a batch that lands every card.
       await Promise.all([refresh(), refreshDrafts()])
       setLanded(done.length === 0 ? null : { ids: done, summary: `${String(done.length)} ${t.batchUnit}` })
       setFailed(`${describe(cause)}｜${t.batchInterrupted} ${String(done.length)} ${t.batchUnit}`)
@@ -706,7 +771,7 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
       setBusy(false)
       setProgress(null)
     }
-  }, [api, drafts, refresh, refreshDrafts, t.batchInterrupted, t.batchUnit])
+  }, [api, drafts, refresh, refreshDrafts, refreshLint, t.batchInterrupted, t.batchUnit])
 
   const discardSelection = useCallback(async (id: string): Promise<void> => {
     setBusy(true)
@@ -819,7 +884,7 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
           {t.refresh}
         </button>
       </header>
-      {status === undefined ? null : <StatusStrip status={status} t={t} />}
+      {status === undefined ? null : <StatusStrip status={status} lint={lint} t={t} onOpenLint={openLint} />}
       {failed === null ? null : (
         <div className="iw-error">
           <span className="iw-error-text">{t.failed}：{failed}</span>
@@ -950,7 +1015,11 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
                       className={selection?.kind === 'lint' ? 'iw-row iw-row-line iw-row-flat iw-row-selected' : 'iw-row iw-row-line iw-row-flat'}
                       onClick={openLint}
                     >
-                      <span className="iw-row-title">{lint.verdict === 'pass' ? `✅ ${t.lintPass}` : `❌ ${t.lintFail}`}</span>
+                      <span className="iw-row-title">
+                        <span className={`iw-chip ${gateTone(lint)}`}>
+                          {lint.verdict === 'pass' ? t.lintPass : t.lintFail}
+                        </span>
+                      </span>
                       <span className="iw-row-meta">
                         {`${t.lintCritical} ${String(lint.counts.critical)} · ${t.lintWarning} ${String(lint.counts.warning)} · ${t.lintSuggestion} ${String(lint.counts.suggestion)}`}
                       </span>
@@ -1108,6 +1177,7 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
               t={t}
               busy={busy}
               onRebuild={() => { void rebuild() }}
+              onOpenCard={(path) => { void openCard(path) }}
             />
           ) : (
             <DraftReader
