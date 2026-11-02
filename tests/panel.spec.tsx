@@ -1428,6 +1428,102 @@ describe('LibraryPanel', () => {
     await view.unmount()
   })
 
+  it('puts a lint dot beside tree status and a gate chip on the card', async () => {
+    const view = await mount(<LibraryPanel api={stubApi({ drafts: [STATUS_DRAFT] })} localeId="zh-CN" />)
+    await expandGroups(view)
+    const row = defined(view.all('button.iw-row').find(button =>
+      button.textContent?.includes(CARD_A.title) === true && !button.className.includes('iw-row-flat')))
+    const dot = defined(row.querySelector('.iw-lint-dot'))
+    expect(dot.getAttribute('data-tone')).toBe('warn')
+    expect(dot.getAttribute('title')).toBe('严重 0 · 警告 1')
+    expect(dot.textContent).toBe('')
+    expect(row.querySelector('.iw-row-meta')?.textContent).toBe('已确认')
+    expect(row.querySelector('.iw-row-meta')?.contains(dot)).toBe(false)
+    expect(row.getAttribute('title')).toBe('创造性判断的三步法 · 概念 三步法 · 相关卡片 2')
+    expect(dot.parentElement?.classList.contains('iw-row-line')).toBe(true)
+    const quiet = defined(view.all('button.iw-row').find(button =>
+      button.textContent?.includes(CARD_B.title) === true && !button.className.includes('iw-row-flat')))
+    expect(quiet.querySelector('.iw-lint-dot')).toBeNull()
+    const review = defined(view.all('.iw-section').find(section =>
+      section.querySelector('.iw-section-title')?.textContent?.startsWith('待确认清单')))
+    expect(review.querySelector('.iw-lint-dot')).toBeNull()
+    const queue = defined(view.all('.iw-section').find(section =>
+      section.querySelector('.iw-section-title')?.textContent?.startsWith('待确认草稿')))
+    expect(queue.querySelector('.iw-lint-dot')).toBeNull()
+    expect(view.all('.iw-lint-dot')).toHaveLength(1)
+    await view.click(row)
+    const chip = defined(view.one('.iw-read .iw-meta button.iw-chip'))
+    expect(chip.textContent).toBe('门禁 · 警告 1')
+    expect(chip.className).toContain('iw-chip-warn')
+    expect(chip.className).not.toContain('iw-chip-error')
+    expect(chip.querySelector('b')?.textContent).toBe('1')
+    expect(chip.getAttribute('title')).toBe('严重 0 · 警告 1')
+    await view.click(chip)
+    expect(view.one('h2.iw-read-title').textContent).toBe('质量门禁')
+    expect(view.text()).toContain('broken-link')
+    await view.unmount()
+
+    const severe: LintReport = {
+      scanned: 2,
+      findings: [
+        { tier: 'critical', code: 'empty-body', message: '卡片正文为空', path: CARD_B.path },
+        { tier: 'critical', code: 'missing-title', message: '卡片没有标题', path: CARD_B.path },
+        { tier: 'warning', code: 'broken-link', message: '断链', path: CARD_B.path },
+        { tier: 'warning', code: 'index-missing', message: '索引不可读', path: '' },
+        { tier: 'suggestion', code: 'orphan-card', message: '孤立卡片', path: CARD_A.path },
+      ],
+      counts: { critical: 2, warning: 2, suggestion: 1 },
+      failOn: 'warning',
+      verdict: 'fail',
+    }
+    const marked = await mount(<LibraryPanel api={stubApi({ lint: severe })} localeId="zh-CN" />)
+    await expandGroups(marked)
+    const bad = defined(marked.all('button.iw-row').find(button =>
+      button.textContent?.includes(CARD_B.title) === true && !button.className.includes('iw-row-flat')))
+    const errorDot = defined(bad.querySelector('.iw-lint-dot'))
+    expect(errorDot.getAttribute('data-tone')).toBe('error')
+    expect(errorDot.getAttribute('title')).toBe('严重 2 · 警告 1')
+    const clean = defined(marked.all('button.iw-row').find(button =>
+      button.textContent?.includes(CARD_A.title) === true && !button.className.includes('iw-row-flat')))
+    expect(clean.querySelector('.iw-lint-dot')).toBeNull()
+    const reviewAgain = defined(marked.all('.iw-section').find(section =>
+      section.querySelector('.iw-section-title')?.textContent?.startsWith('待确认清单')))
+    expect(reviewAgain.querySelector('.iw-lint-dot')).toBeNull()
+    expect(marked.all('.iw-lint-dot')).toHaveLength(1)
+    await marked.click(bad)
+    const severeChip = defined(marked.one('.iw-read .iw-meta button.iw-chip'))
+    expect(severeChip.textContent).toBe('门禁 · 严重 2')
+    expect(severeChip.className).toContain('iw-chip-error')
+    expect(severeChip.textContent).not.toContain('警告')
+    expect(severeChip.getAttribute('title')).toBe('严重 2 · 警告 1')
+    await marked.click(severeChip)
+    expect(marked.one('h2.iw-read-title').textContent).toBe('质量门禁')
+    expect(marked.text()).toContain('empty-body')
+    await marked.unmount()
+
+    const filtered = await mount(<LibraryPanel api={stubApi()} localeId="zh-CN" />)
+    await filtered.type(filtered.input('input.iw-filter-input'), '创造性')
+    const match = defined(filtered.all('button.iw-row').find(button => button.textContent?.includes(CARD_A.title)))
+    expect(match.querySelector('.iw-lint-dot')?.getAttribute('data-tone')).toBe('warn')
+    expect(match.querySelector('.iw-row-meta')?.textContent).toBe('已确认')
+    await filtered.type(filtered.input('input.iw-input'), '三步法')
+    await filtered.click(defined(filtered.all('button.iw-btn').find(button => button.textContent === '检索')))
+    expect(filtered.all('.iw-hit .iw-lint-dot')).toHaveLength(0)
+    expect(filtered.all('.iw-lint-dot')).toHaveLength(0)
+    await filtered.unmount()
+
+    const english = await mount(<LibraryPanel api={stubApi()} localeId="en-US" />)
+    await expandGroups(english)
+    const enRow = defined(english.all('button.iw-row').find(button =>
+      button.textContent?.includes(CARD_A.title) === true && !button.className.includes('iw-row-flat')))
+    expect(enRow.querySelector('.iw-lint-dot')?.getAttribute('title')).toBe('critical 0 · warning 1')
+    await english.click(enRow)
+    const enChip = defined(english.one('.iw-read .iw-meta button.iw-chip'))
+    expect(enChip.textContent).toBe('Gate · warning 1')
+    expect(enChip.getAttribute('title')).toBe('critical 0 · warning 1')
+    await english.unmount()
+  })
+
   it('filters the tree by title without asking the library', async () => {
     const api = stubApi()
     const view = await mount(<LibraryPanel api={api} localeId="zh-CN" />)

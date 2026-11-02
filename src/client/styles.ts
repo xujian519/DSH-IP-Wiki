@@ -285,6 +285,16 @@ button.iw-chip:hover { background: var(--dsw-alias-interactive-bg-hover); }
   white-space: nowrap;
 }
 .iw-row-line > .iw-chip { flex: none; }
+/* 树行门禁色点：6px，与状态 chip 的圆点同一尺寸。条数在 title 里，行高仍是 30px。 */
+.iw-lint-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  corner-shape: round;
+}
+.iw-lint-dot[data-tone='error'] { background: var(--dsw-alias-state-error-primary); }
+.iw-lint-dot[data-tone='warn'] { background: var(--dsw-alias-state-warn-primary); }
 .iw-row-title { display: block; }
 .iw-row-meta { display: block; margin-top: 2px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .iw-row-flat { padding-left: 8px; }

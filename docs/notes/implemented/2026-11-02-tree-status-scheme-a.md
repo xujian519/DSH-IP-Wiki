@@ -31,3 +31,4 @@ Status: implemented
 - 域分组默认收起，`Shift+X` 不变。左树「全部确认」仍是单行 `.iw-confirm`，不套 `.iw-confirm-stack`。卡片阅读器见[卡片阅读器方案 A](2026-11-02-card-reader-scheme-a.md)。草稿阅读器见[草稿阅读器方案 A](2026-11-02-draft-reader-scheme-a.md)。
 - 未做：虚拟列表、树宽拖拽、密度开关。真机视觉验收仍是[既有缺口](../../TECH_DEBT.md#无浏览器真机验证)。本轮证据是 jsdom（`tests/panel.spec.tsx`、`tests/client-parts.spec.tsx`）；这个仓库不起独立的面板页面。
 - 命中卡、检索中样式，以及结果态筛选旁的不可用文案，是另一条决策：[检索结果方案 A](2026-11-02-search-results-scheme-a.md)。本条仍约束钉头双框和「结果只换滚动区」。
+- 有严重或警告的树行在状态旁加色点，见[门禁色点方案 B2-A](2026-11-02-lint-badge-scheme-b2-a.md)。行的 `title` 仍只放标题、概念和相关条数。

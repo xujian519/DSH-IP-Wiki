@@ -140,6 +140,12 @@ describe('libraryStyles', () => {
     expect(scroll.slice(0, scroll.indexOf('}'))).toContain('overflow-y: auto')
     const row = css.slice(css.indexOf('.iw-row-line {'))
     expect(row.slice(0, row.indexOf('}'))).toContain('min-height: 30px')
+    const dot = css.slice(css.indexOf('.iw-lint-dot {'))
+    const dotRule = dot.slice(0, dot.indexOf('}'))
+    expect(dotRule).toContain('width: 6px')
+    expect(dotRule).toContain('height: 6px')
+    expect(css).toContain(".iw-lint-dot[data-tone='error'] { background: var(--dsw-alias-state-error-primary); }")
+    expect(css).toContain(".iw-lint-dot[data-tone='warn'] { background: var(--dsw-alias-state-warn-primary); }")
     // author display:flex 会盖过 [hidden]，必须单独收回，详情收起时第二行才真的不占位。
     expect(css).toContain('.iw-status-extra[hidden] { display: none; }')
   })

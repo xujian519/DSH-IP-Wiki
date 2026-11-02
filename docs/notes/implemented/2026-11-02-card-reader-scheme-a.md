@@ -30,3 +30,4 @@ Status: implemented
 - 付出：`.iw-meta` 与 `.iw-confirm` 是共用类，门禁、报告的芯片行以及左树批量确认条也带上 `40em` 上限。树栏比 `40em` 窄，确认条外观不变。草稿阅读器的版式见[草稿阅读器方案 A](2026-11-02-draft-reader-scheme-a.md)。
 - 未做：方案 B 的第三栏与 sticky 迷你条。真机视觉验收仍是[既有缺口](../../TECH_DEBT.md#无浏览器真机验证)。本轮证据是 jsdom（`tests/panel.spec.tsx`、`tests/client-parts.spec.tsx`）；这个仓库不起独立的面板页面。
 - 左树与顶栏状态条的收束是另一条决策：[卡片树与状态条方案 A](2026-11-02-tree-status-scheme-a.md)。检索命中卡是[检索结果方案 A](2026-11-02-search-results-scheme-a.md)。本条只约束阅读器。
+- 芯片行上的门禁芯片见[门禁色点方案 B2-A](2026-11-02-lint-badge-scheme-b2-a.md)。
