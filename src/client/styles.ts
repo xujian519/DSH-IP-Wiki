@@ -158,11 +158,11 @@ export function libraryStyles(): string {
 .iw-btn-danger:hover { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent); }
 .iw-btn:disabled { opacity: 0.55; cursor: default; }
 .iw-btn:disabled:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent); }
-.iw-input:focus-visible, .iw-btn:focus-visible, .iw-status-toggle:focus-visible, .iw-row:focus-visible, .iw-group-head:focus-visible {
+.iw-input:focus-visible, .iw-btn:focus-visible, .iw-status-toggle:focus-visible, .iw-row:focus-visible, .iw-group-head:focus-visible, .iw-hit-open:focus-visible, .iw-hit-source summary:focus-visible {
   outline: 2px solid var(--dsw-alias-brand-primary);
   outline-offset: 1px;
 }
-.iw-row:focus-visible, .iw-group-head:focus-visible { outline-offset: -2px; }
+.iw-row:focus-visible, .iw-group-head:focus-visible, .iw-hit-open:focus-visible { outline-offset: -2px; }
 @media (prefers-reduced-motion: reduce) {
   .iw-btn, .iw-row, .iw-group-head { transition: none; }
 }
@@ -272,6 +272,17 @@ export function libraryStyles(): string {
 .iw-row-meta { display: block; margin-top: 2px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .iw-row-flat { padding-left: 8px; }
 .iw-empty { padding: 16px; color: var(--dsw-alias-label-secondary); font-size: 12px; text-align: center; }
+/* 检索进行中不是空列表：左对齐、主色、虚线框，不穿 .iw-empty 的居中灰字。 */
+.iw-searching {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 0.5px dashed var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+}
 /* The retrieval-degradation notice is a warning about the answer, not an empty
    list, so it does not wear the empty state's clothes. */
 .iw-notice {
@@ -431,9 +442,10 @@ export function libraryStyles(): string {
 .iw-details .iw-facts { margin: 8px 0 0; }
 .iw-related-list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .iw-related-unresolved { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.5; }
-.iw-filter { padding: 0; }
+.iw-filter { display: flex; align-items: center; gap: 6px; padding: 0; }
 .iw-filter-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 4px 8px;
   border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 8px;
@@ -443,6 +455,13 @@ export function libraryStyles(): string {
 }
 .iw-filter-input:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
 .iw-filter-input:disabled { opacity: 0.55; }
+.iw-filter-unavailable {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
 .iw-finding-group-head { font-size: 12px; font-weight: 500; }
 .iw-tier-head[data-tier='critical'] { box-shadow: inset 2px 0 0 var(--dsw-alias-state-error-primary); }
 .iw-tier-head[data-tier='warning'] { box-shadow: inset 2px 0 0 var(--dsw-alias-state-warn-primary); }
@@ -523,12 +542,86 @@ export function libraryStyles(): string {
   color: var(--dsw-alias-label-primary);
   background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent);
 }
-.iw-snippet {
-  display: block;
-  margin-top: 3px;
+/* 命中卡不借用树行：边框和填充把它从 30px 扫描行里分开。 */
+.iw-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0;
+  padding: 8px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent);
+}
+.iw-hit:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.iw-hit[data-selected='true'] {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 10%, transparent);
+  box-shadow: inset 2px 0 0 var(--dsw-alias-label-primary);
+}
+.iw-hit-open {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.iw-hit-head { display: flex; align-items: baseline; gap: 8px; }
+.iw-hit-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.iw-hit-score {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.iw-hit-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+}
+.iw-hit-status::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--dsw-alias-border-l2);
+}
+.iw-hit-status[data-status='draft']::before,
+.iw-hit-status[data-status='deprecated']::before { background: var(--dsw-alias-state-warn-primary); }
+.iw-hit-status[data-status='confirmed']::before { background: var(--dsw-alias-state-success-primary); }
+.iw-hit-layers { display: flex; flex-direction: column; gap: 1px; }
+.iw-hit-type { font-size: 12px; font-weight: 500; line-height: 1.4; }
+.iw-hit-domain {
+  padding-left: 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.iw-hit-matched { color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1.4; }
+.iw-hit-snippet {
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 1.5;
 }
+.iw-hit-source { color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1.5; }
+.iw-hit-source summary { cursor: pointer; }
+.iw-hit-source-body { display: block; margin-top: 2px; overflow-wrap: anywhere; }
 `
 }

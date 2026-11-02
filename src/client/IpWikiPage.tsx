@@ -307,7 +307,13 @@ function modeLabel(stage: SearchMode, t: Messages): string {
   }
 }
 
-/** One search hit, with the excerpt and the provenance that make it checkable. */
+/**
+ * 一条检索命中，单独成卡。
+ *
+ * 不用树行的 `.iw-row`：树行是 30px 的扫描行，命中要同时放下标题、状态、
+ * 卡型及其下的域、片段，以及可折的出处。出处的 `details` 放在按钮外面，
+ * 折叠控件不能塞进按钮。
+ */
 function HitRow({ hit, t, selected, onOpen }: {
   readonly hit: SearchHit
   readonly t: Messages
@@ -316,23 +322,27 @@ function HitRow({ hit, t, selected, onOpen }: {
 }): ReactNode {
   const provenance = [...hit.lawRefs, hit.sourcePath].filter(part => part !== '')
   return (
-    <button
-      type="button"
-      className={selected ? 'iw-row iw-row-flat iw-row-selected' : 'iw-row iw-row-flat'}
-      onClick={() => { onOpen(hit.path) }}
-    >
-      <span className="iw-row-title">{hit.title}</span>
-      <span className="iw-row-meta">
-        {CARD_TYPE_LABEL[hit.type]}
-        {` · ${hit.domainL2}`}
-        {` · ${hit.matched.map(stage => modeLabel(stage, t)).join(' + ')}`}
-        {` · ${t.score} ${hit.score.toFixed(3)}`}
-      </span>
-      <span className="iw-snippet">{hit.snippet}</span>
+    <div className="iw-hit" data-selected={selected ? 'true' : 'false'}>
+      <button type="button" className="iw-hit-open" onClick={() => { onOpen(hit.path) }}>
+        <span className="iw-hit-head">
+          <span className="iw-hit-title">{hit.title}</span>
+          <span className="iw-hit-score">{`${t.score} ${hit.score.toFixed(1)}`}</span>
+        </span>
+        <span className="iw-hit-status" data-status={hit.status}>{`${t.status} ${statusText(hit.status, t)}`}</span>
+        <span className="iw-hit-layers">
+          <span className="iw-hit-type">{CARD_TYPE_LABEL[hit.type]}</span>
+          <span className="iw-hit-domain">{hit.domainL2}</span>
+        </span>
+        <span className="iw-hit-matched">{hit.matched.map(stage => modeLabel(stage, t)).join(' + ')}</span>
+        <span className="iw-hit-snippet">{hit.snippet}</span>
+      </button>
       {provenance.length === 0 ? null : (
-        <span className="iw-row-meta">{t.provenance}：{provenance.join(' · ')}</span>
+        <details className="iw-hit-source">
+          <summary>{t.provenance}</summary>
+          <span className="iw-hit-source-body">{provenance.join(' · ')}</span>
+        </details>
       )}
-    </button>
+    </div>
   )
 }
 
@@ -871,12 +881,16 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
                 placeholder={t.filterPlaceholder}
                 aria-label={t.filterPlaceholder}
                 disabled={submitted !== ''}
+                aria-describedby={submitted === '' ? undefined : 'iw-filter-unavailable'}
                 onChange={(event) => { setFilter(event.target.value) }}
               />
+              {submitted === '' ? null : (
+                <span id="iw-filter-unavailable" className="iw-filter-unavailable">{t.filterUnavailable}</span>
+              )}
             </div>
           </div>
           <div className="iw-tree-scroll">
-            {searching ? <div className="iw-empty">{t.searching}</div> : null}
+            {searching ? <div className="iw-searching" role="status">{t.searching}</div> : null}
             {submitted === '' ? (
               <>
                 <section className="iw-section">
