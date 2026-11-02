@@ -110,6 +110,23 @@ describe('libraryStyles', () => {
     expect(css).toContain('.iw-status-extra[hidden] { display: none; }')
   })
 
+  it('gives a search hit its own card and keeps searching distinct from empty', () => {
+    const css = libraryStyles()
+    expect(css).toContain('.iw-hit {')
+    expect(css).toContain('.iw-hit-type {')
+    expect(css).toContain('.iw-hit-domain {')
+    expect(css).toContain(".iw-hit[data-selected='true']")
+    const searching = css.slice(css.indexOf('.iw-searching {'))
+    const searchingRule = searching.slice(0, searching.indexOf('}'))
+    expect(searchingRule).toContain('text-align: left')
+    expect(searchingRule).toContain('border: 0.5px dashed')
+    expect(searchingRule).not.toContain('text-align: center')
+    const empty = css.slice(css.indexOf('.iw-empty {'))
+    const emptyRule = empty.slice(0, empty.indexOf('}'))
+    expect(emptyRule).toContain('text-align: center')
+    expect(emptyRule).not.toContain('border:')
+  })
+
   it('styles every class the client components use', () => {
     const css = libraryStyles()
     const directory = join(process.cwd(), 'src', 'client')

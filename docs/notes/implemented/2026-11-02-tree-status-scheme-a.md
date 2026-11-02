@@ -11,7 +11,7 @@ Status: implemented
 只改顶栏 `StatusStrip` 和左栏 `nav.iw-tree` 的导航（`src/client/IpWikiPage.tsx`、`src/client/styles.ts`、`src/client/locales.ts`）。右栏 `CardReader` 保持[卡片阅读器方案 A](2026-11-02-card-reader-scheme-a.md)。不引依赖，Client 仍是单文件。
 
 1. **状态条两档**。默认一行只留卡片总数、未确认（`draft` 计数大于 0 才出现）、索引漂移（`driftOf` 的四档文案）、待审（`needsReview` 非空才出现，文案是 `reviewStrip`：待审 / Review；左栏节标题仍用 `reviewQueue`）。「详情」是同一条里的按钮（`statusDetails`：详情 / Details），`aria-expanded` 控制 `.iw-status-extra`。展开后才是卡型分项、整理报告数、已确认数、索引生成时间（没有索引时仍是「无索引」）。`.iw-status-extra[hidden] { display: none }` 单独写，避免 `display: flex` 盖过 `[hidden]`。
-2. **左栏钉检索和筛选**。`nav.iw-tree` 改成纵向 flex、`overflow: hidden`、`min-height: 0`。`.iw-tree-pin` 固定「提问检索」和「筛选标题（本树）」；`.iw-tree-scroll` 才 `overflow-y: auto`，里面是草稿、门禁、待审、卡片树、报告。检索结果仍替换滚动区里的树，两个框留在钉头。筛选只作用于本树标题，结果态把它 `disabled`，点「返回卡片树」后按原词继续滤。
+2. **左栏钉检索和筛选**。`nav.iw-tree` 改成纵向 flex、`overflow: hidden`、`min-height: 0`。`.iw-tree-pin` 固定「提问检索」和「筛选标题（本树）」；`.iw-tree-scroll` 才 `overflow-y: auto`，里面是草稿、门禁、待审、卡片树、报告。检索结果仍替换滚动区里的树，两个框留在钉头。筛选只作用于本树标题，结果态把它 `disabled`，点「返回卡片树」后按原词继续滤。框旁写明不可用的文案，以及命中卡本身，见[检索结果方案 A](2026-11-02-search-results-scheme-a.md)。
 3. **树行 meta 只留状态**。分组行和筛选命中行的 `.iw-row-meta` 都只渲染 `statusText`。概念与相关条数放进 `title`（`概念 三步法 · 相关卡片 2` 这种）。筛选命中丢掉了卡型分组，卡型也放进 `title`。`.iw-row-line` 的 `min-height: 30px` 不动。卡片树节标题在未筛选时带 `（N 组）`（`groups`）；整理报告节标题带份数，因为报告数已经不在状态条默认行。
 4. **文案**。`searchPlaceholder` 为「提问检索」/ `Ask to search`。`filterPlaceholder` 为「筛选标题（本树）」/ `Filter titles (this tree)`。新文案都走 `locales.ts`。
 5. **没动的约束**。无虚拟列表、无树宽拖拽、无密度开关。域分组默认收起，`Shift+X` 全展/全收保留。字重以 500 为主（`.iw-md-h3` 的 600 仍是阅读器那条的例外）。边框 0.5px，中性填充从墨水派生，chip 文字不着状态色。左树「全部确认」仍是单行 `.iw-confirm`，不套 `.iw-confirm-stack`。
@@ -30,3 +30,4 @@ Status: implemented
 - 付出：卡型分项、报告数、已确认数和索引时间要再点一次「详情」。检索结果态里标题筛选不可用，词还留着，回到树才生效。整理报告节标题带上了份数。
 - 右栏阅读器、草稿确认的单行 `.iw-confirm`、域分组默认收起和 `Shift+X` 都不变。
 - 未做：虚拟列表、树宽拖拽、密度开关。真机视觉验收仍是[既有缺口](../../TECH_DEBT.md#无浏览器真机验证)。本轮证据是 jsdom（`tests/panel.spec.tsx`、`tests/client-parts.spec.tsx`）；这个仓库不起独立的面板页面。
+- 命中卡、检索中样式，以及结果态筛选旁的不可用文案，是另一条决策：[检索结果方案 A](2026-11-02-search-results-scheme-a.md)。本条仍约束钉头双框和「结果只换滚动区」。
