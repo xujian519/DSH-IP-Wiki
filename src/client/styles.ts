@@ -226,6 +226,7 @@ export function libraryStyles(): string {
   display: flex;
   align-items: center;
   gap: 8px;
+  max-width: 40em;
   margin: 4px 0 8px;
   padding: 8px 10px;
   border: 0.5px solid var(--dsw-alias-border-l2);
@@ -234,6 +235,10 @@ export function libraryStyles(): string {
   line-height: 1.5;
 }
 .iw-confirm-ask { color: var(--dsw-alias-label-primary); }
+/* 阅读器的确认条把问句放在上面、按钮行右对齐，窄栏才不会把两个动作挤进问句。
+   左树的「全部确认」仍是单行，不用这个修饰类。 */
+.iw-confirm-stack { flex-direction: column; align-items: stretch; }
+.iw-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .iw-read {
   flex: 1;
   min-width: 0;
@@ -242,7 +247,7 @@ export function libraryStyles(): string {
   padding: 16px 24px 40px;
 }
 .iw-read-title { font: var(--dsw-font-markdown-h1); margin: 0 0 6px; max-width: 40em; }
-.iw-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; }
+.iw-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; max-width: 40em; }
 .iw-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 10px 0 14px; font-size: 12px; line-height: 1.4; }
 .iw-fact-key { color: var(--dsw-alias-label-secondary); }
 .iw-fact-value { overflow-wrap: anywhere; }
@@ -264,7 +269,8 @@ export function libraryStyles(): string {
 .iw-md-h1, .iw-md-h2, .iw-md-h3, .iw-md-p, .iw-md-list, .iw-md-quote { max-width: 40em; }
 .iw-md-h1 { font: var(--dsw-font-markdown-h2); margin: 24px 0 8px; }
 .iw-md-h2 { font: var(--dsw-font-markdown-h4); margin: 20px 0 6px; }
-.iw-md-h3 { margin: 16px 0 4px; font-size: 13px; line-height: 22px; font-weight: 500; color: var(--dsw-alias-label-secondary); }
+/* h3 及更深仍是同一档：字号与次级色不动，只把字重和间距抬一点，方便扫读。 */
+.iw-md-h3 { margin: 20px 0 6px; font-size: 13px; line-height: 22px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
 .iw-md-p { margin: 8px 0; }
 .iw-md-list { margin: 8px 0; padding-left: 20px; }
 .iw-md-list li { margin: 3px 0; }
@@ -316,16 +322,21 @@ export function libraryStyles(): string {
   text-underline-offset: 3px;
   cursor: pointer;
 }
-.iw-toc {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+.iw-toc,
+.iw-related {
   max-width: 40em;
   margin: 10px 0 14px;
   padding: 8px 10px;
   border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
+}
+.iw-toc summary { cursor: pointer; }
+.iw-toc-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-top: 2px;
 }
 .iw-toc-item {
   padding: 2px 6px;
@@ -344,12 +355,21 @@ export function libraryStyles(): string {
   color: var(--dsw-alias-label-secondary);
   font-size: 11px;
 }
-.iw-read-actions { display: flex; justify-content: flex-end; margin: 0 0 10px; }
-.iw-details { margin: 0 0 14px; font-size: 12px; }
+.iw-read-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 40em;
+  margin: 0 0 6px;
+}
+.iw-read-actions .iw-read-title { flex: 1; min-width: 0; margin: 0; }
+.iw-read-actions .iw-btn { flex: none; }
+.iw-details { max-width: 40em; margin: 0 0 14px; font-size: 12px; }
 .iw-details summary { padding: 2px 0; color: var(--dsw-alias-label-secondary); cursor: pointer; }
 .iw-details .iw-facts { margin: 8px 0 0; }
-.iw-related { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: 40em; margin: 0 0 14px; }
-.iw-related .iw-section-title { padding: 0; }
+.iw-related-list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.iw-related-unresolved { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.5; }
 .iw-filter { padding: 0 0 8px; }
 .iw-filter-input {
   width: 100%;

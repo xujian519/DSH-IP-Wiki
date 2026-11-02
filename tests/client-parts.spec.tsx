@@ -60,8 +60,14 @@ describe('libraryStyles', () => {
     // The panel used to remove the one focus ring it had.
     expect(css).not.toContain('outline: none')
     expect(css).toContain('var(--dsw-alias-link)')
-    // Feature CSS tops out at 500; the markdown tokens carry their own weights.
-    expect(css).not.toContain('font-weight: 600')
+    // Feature CSS tops out at 500, except the merged h3 tier: its weight steps
+    // to 600 so a scan can find it. Colour and size stay the secondary tier.
+    const feature = css.replace(/\.iw-md-h3 \{[^}]*\}/u, '')
+    expect(feature).not.toContain('font-weight: 600')
+    expect(css).toMatch(/\.iw-md-h3 \{[^}]*font-weight: 600/u)
+    expect(css).toMatch(/\.iw-md-h3 \{[^}]*font-size: 13px/u)
+    expect(css).toMatch(/\.iw-md-h3 \{[^}]*margin: 20px 0 6px/u)
+    expect(css).toMatch(/\.iw-md-h3 \{[^}]*color: var\(--dsw-alias-label-secondary\)/u)
   })
 
   it('states card status as a dot rather than as state-coloured text', () => {
@@ -79,6 +85,12 @@ describe('libraryStyles', () => {
   it('measures prose, and keeps a destructive action apart from a read', () => {
     const css = libraryStyles()
     expect(css).toContain('max-width: 40em')
+    // The card header shares the prose measure, so a wide window cannot
+    // stretch chips, the delete row, the confirm bar, or metadata past 40em.
+    for (const selector of ['.iw-meta {', '.iw-read-actions {', '.iw-confirm {', '.iw-details {']) {
+      const rule = css.slice(css.indexOf(selector))
+      expect(rule.slice(0, rule.indexOf('}'))).toContain('max-width: 40em')
+    }
     expect(css).toContain('.iw-btn-danger')
     expect(css).toContain('.iw-btn-quiet')
     expect(css).toContain('.iw-btn-primary')

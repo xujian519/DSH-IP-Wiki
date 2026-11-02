@@ -176,9 +176,15 @@ function CardReader({ document, t, busy, wiki, confirming, onAskDelete, onCancel
   // listed, so the contents matches what the reader can actually reach.
   const headings = headingsOf(document.body)
     .filter((heading, index) => index !== 0 || heading.text.trim() !== document.title.trim())
+  const related = document.relatedConcepts
   return (
     <article>
-      <h2 className="iw-read-title">{document.title}</h2>
+      <div className="iw-read-actions">
+        <h2 className="iw-read-title">{document.title}</h2>
+        <button type="button" className="iw-btn iw-btn-danger" disabled={busy} onClick={onAskDelete}>
+          {t.deleteCard}
+        </button>
+      </div>
       <div className="iw-meta">
         <Chip label={t.type} value={CARD_TYPE_LABEL[document.type]} />
         <Chip label={t.domain} value={document.domainL2} />
@@ -187,17 +193,13 @@ function CardReader({ document, t, busy, wiki, confirming, onAskDelete, onCancel
         {document.needsReview ? <Chip label={t.needsReview} value="" tone="iw-chip-warn" /> : null}
         {document.supersededBy === '' ? null : <Chip label={t.supersededBy} value={document.supersededBy} tone="iw-chip-warn" />}
       </div>
-      <div className="iw-read-actions">
-        <button type="button" className="iw-btn iw-btn-danger" disabled={busy} onClick={onAskDelete}>
-          {t.deleteCard}
-        </button>
-      </div>
       {!confirming ? null : (
-        <div className="iw-confirm">
+        <div className="iw-confirm iw-confirm-stack">
           <span className="iw-confirm-ask">{t.deleteCardAsk}</span>
-          <span className="iw-spacer" />
-          <button type="button" className="iw-btn iw-btn-danger" onClick={onDelete}>{t.deleteCardYes}</button>
-          <button type="button" className="iw-btn iw-btn-quiet" onClick={onCancelDelete}>{t.cancel}</button>
+          <div className="iw-confirm-actions">
+            <button type="button" className="iw-btn iw-btn-danger" onClick={onDelete}>{t.deleteCardYes}</button>
+            <button type="button" className="iw-btn iw-btn-quiet" onClick={onCancelDelete}>{t.cancel}</button>
+          </div>
         </div>
       )}
       <details className="iw-details">
@@ -212,41 +214,46 @@ function CardReader({ document, t, busy, wiki, confirming, onAskDelete, onCancel
           <Fact name="path" value={document.path} />
         </div>
       </details>
-      {document.relatedConcepts.length === 0 ? null : (
-        <div className="iw-related">
-          <span className="iw-section-title">{t.related}</span>
-          {document.relatedConcepts.map(name => {
-            const path = wiki.resolve(name)
-            return path === undefined
-              ? <span key={name} className="iw-wikilink">{name}</span>
-              : (
-                <button
-                  key={name}
-                  type="button"
-                  className="iw-wikilink iw-wikilink-open"
-                  onClick={() => { wiki.open(path) }}
-                >
-                  {name}
-                </button>
-              )
-          })}
-        </div>
+      {related.length === 0 ? null : (
+        <section className="iw-related">
+          <div className="iw-section-title">{`${t.relatedHeading} · ${String(related.length)}`}</div>
+          <div className="iw-related-list">
+            {related.map(name => {
+              const path = wiki.resolve(name)
+              // 库里没有的 id 保持文本：注明「不在库内」，并且不许看起来像点了没反应的控件。
+              return path === undefined
+                ? <span key={name} className="iw-related-unresolved">{`${name} · ${t.relatedUnresolved}`}</span>
+                : (
+                  <button
+                    key={name}
+                    type="button"
+                    className="iw-wikilink iw-wikilink-open"
+                    onClick={() => { wiki.open(path) }}
+                  >
+                    {name}
+                  </button>
+                )
+            })}
+          </div>
+        </section>
       )}
       {headings.length < 2 ? null : (
-        <nav className="iw-toc">
-          <div className="iw-section-title">{t.toc}</div>
-          {headings.map(heading => (
-            <button
-              key={heading.id}
-              type="button"
-              className="iw-toc-item"
-              data-level={heading.level}
-              onClick={() => { showHeading(heading.id) }}
-            >
-              {heading.text}
-            </button>
-          ))}
-        </nav>
+        <details className="iw-toc" open>
+          <summary className="iw-section-title">{t.toc}</summary>
+          <nav className="iw-toc-list">
+            {headings.map(heading => (
+              <button
+                key={heading.id}
+                type="button"
+                className="iw-toc-item"
+                data-level={heading.level}
+                onClick={() => { showHeading(heading.id) }}
+              >
+                {heading.text}
+              </button>
+            ))}
+          </nav>
+        </details>
       )}
       <Markdown text={document.body} omitLeadingHeading={document.title} wikilink={wiki} />
     </article>
