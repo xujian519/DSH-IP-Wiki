@@ -50,7 +50,45 @@ export function libraryStyles(): string {
   border-bottom: 0.5px solid var(--dsw-alias-border-l1);
   background: var(--dsw-specific-sidebar-fill);
 }
-.iw-status { padding: 6px 12px; background: transparent; }
+/* 状态条两档：默认一行，详情另起一行。列方向让详情行落在芯片行下面。 */
+.iw-status {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 6px 12px;
+  background: transparent;
+}
+.iw-status-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.iw-status-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 1px 7px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.iw-status-toggle:hover { color: var(--dsw-alias-label-primary); }
+.iw-status-extra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
+}
+/* author 的 display:flex 会盖过 UA 的 [hidden]，这里用更高优先级把它收回去。 */
+.iw-status-extra[hidden] { display: none; }
 .iw-banner { padding: 6px 12px; background: transparent; }
 .iw-title { font-size: 20px; line-height: 28px; font-weight: 500; }
 .iw-root-path {
@@ -120,7 +158,7 @@ export function libraryStyles(): string {
 .iw-btn-danger:hover { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent); }
 .iw-btn:disabled { opacity: 0.55; cursor: default; }
 .iw-btn:disabled:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent); }
-.iw-input:focus-visible, .iw-btn:focus-visible, .iw-row:focus-visible, .iw-group-head:focus-visible {
+.iw-input:focus-visible, .iw-btn:focus-visible, .iw-status-toggle:focus-visible, .iw-row:focus-visible, .iw-group-head:focus-visible {
   outline: 2px solid var(--dsw-alias-brand-primary);
   outline-offset: 1px;
 }
@@ -129,13 +167,30 @@ export function libraryStyles(): string {
   .iw-btn, .iw-row, .iw-group-head { transition: none; }
 }
 .iw-body { display: flex; flex: 1; min-height: 0; }
+/* 左栏自己不滚。检索和标题筛选钉在顶部，下面的树才滚。 */
 .iw-tree {
   width: 320px;
   flex: none;
-  overflow-y: auto;
-  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   border-right: 0.5px solid var(--dsw-alias-border-l1);
   background: var(--dsw-specific-sidebar-fill);
+}
+.iw-tree-pin {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+}
+.iw-tree-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
 }
 .iw-section { margin-bottom: 12px; }
 .iw-section-title {
@@ -143,6 +198,12 @@ export function libraryStyles(): string {
   font-size: 12px;
   font-weight: 500;
   color: var(--dsw-alias-label-secondary);
+}
+.iw-section-count {
+  margin-left: 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
 }
 .iw-group { display: flex; flex-direction: column; gap: 2px; }
 .iw-group-head {
@@ -370,7 +431,7 @@ export function libraryStyles(): string {
 .iw-details .iw-facts { margin: 8px 0 0; }
 .iw-related-list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .iw-related-unresolved { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.5; }
-.iw-filter { padding: 0 0 8px; }
+.iw-filter { padding: 0; }
 .iw-filter-input {
   width: 100%;
   padding: 4px 8px;
@@ -381,6 +442,7 @@ export function libraryStyles(): string {
   font-size: 12px;
 }
 .iw-filter-input:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
+.iw-filter-input:disabled { opacity: 0.55; }
 .iw-finding-group-head { font-size: 12px; font-weight: 500; }
 .iw-tier-head[data-tier='critical'] { box-shadow: inset 2px 0 0 var(--dsw-alias-state-error-primary); }
 .iw-tier-head[data-tier='warning'] { box-shadow: inset 2px 0 0 var(--dsw-alias-state-warn-primary); }
@@ -404,7 +466,7 @@ export function libraryStyles(): string {
 .iw-search {
   display: flex;
   gap: 6px;
-  padding: 4px 2px 8px;
+  padding: 0;
 }
 .iw-input {
   flex: 1;
