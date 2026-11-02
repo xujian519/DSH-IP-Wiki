@@ -843,15 +843,27 @@ describe('LibraryPanel', () => {
     await withNeither.unmount()
   })
 
-  it('opens the card a finding names and leaves a library-wide finding inert', async () => {
+  it('opens the card a path group names and leaves the library group inert', async () => {
     const api = stubApi()
     const view = await mount(<LibraryPanel api={api} localeId="zh-CN" />)
     await view.click(defined(view.one('header.iw-status button.iw-chip')))
-    const libraryWide = defined(view.all('.iw-finding').find(row => row.textContent?.includes('库级')))
-    expect(libraryWide.tagName).toBe('DIV')
-    await view.click(libraryWide)
+    const groups = view.all('.iw-lint-group')
+    expect(groups.map(group => group.getAttribute('data-path'))).toEqual([CARD_A.path, CARD_B.path, ''])
+    const library = defined(groups.find(group => group.getAttribute('data-library') === 'true'))
+    expect(library.querySelector('button.iw-lint-group-title')).toBeNull()
+    const libraryTitle = defined(library.querySelector('.iw-lint-group-title'))
+    expect(libraryTitle.tagName).toBe('SPAN')
+    expect(libraryTitle.textContent).toBe('库级')
+    await view.click(libraryTitle)
+    const libraryFinding = defined(library.querySelector('.iw-finding'))
+    expect(libraryFinding.tagName).toBe('DIV')
+    await view.click(libraryFinding)
     expect(api.calls.some(call => call.startsWith('card:'))).toBe(false)
-    const linked = defined(view.all('button.iw-finding').find(row => row.textContent?.includes(CARD_A.path)))
+    const linked = defined(view.all('button.iw-lint-group-title').find(button => button.textContent === CARD_A.path))
+    expect(linked.closest('.iw-lint-group')?.querySelector('.iw-lint-group-counts')?.textContent).toBe('警告 1')
+    const suggestion = defined(view.all('.iw-lint-group').find(group => group.getAttribute('data-path') === CARD_B.path))
+    expect(suggestion.querySelector('.iw-lint-group-counts')?.textContent).toBe('suggestion 1')
+    expect(suggestion.querySelector('.iw-lint-group-counts')?.textContent).not.toContain('警告')
     await view.click(linked)
     expect(api.calls).toContain(`card:${CARD_A.path}`)
     expect(view.text()).toContain('第一步')
@@ -863,7 +875,140 @@ describe('LibraryPanel', () => {
     expect(view.one('header.iw-status button.iw-chip').textContent).toBe('Gate failed · warning 2')
     const gateRow = defined(view.all('button.iw-row').find(row => row.textContent?.includes('suggestion')))
     expect(gateRow.textContent).not.toMatch(/✅|❌/u)
+    await view.click(defined(view.one('header.iw-status button.iw-chip')))
+    const library = view.one('.iw-lint-group[data-library="true"]')
+    expect(library.querySelector('.iw-lint-group-title')?.textContent).toBe('library')
+    expect(library.querySelector('button.iw-lint-group-title')).toBeNull()
+    expect(library.querySelector('button.iw-lint-mark')?.textContent).toBe('Mark read')
     await view.unmount()
+  })
+
+  it('shows a pending draft as a title and a kind chip, with the meta on the title attribute', async () => {
+    const merge: CardDraft = {
+      ...DRAFT,
+      id: 'd3',
+      kind: 'merge',
+      title: '合并用的规则卡',
+      classification: 'client-material',
+      policy: 'local-only',
+    }
+    const view = await mount(<LibraryPanel api={stubApi({ drafts: [DRAFT, merge, STATUS_DRAFT] })} localeId="zh-CN" />)
+    const queue = defined(view.all('.iw-section').find(section => section.querySelector('.iw-section-title')?.textContent?.startsWith('待确认草稿')))
+    const rows = [...queue.querySelectorAll('button.iw-row')]
+    expect(rows).toHaveLength(3)
+    const card = defined(rows.find(row => row.textContent?.includes('拟新增的规则卡')))
+    expect(card.querySelector('.iw-chip')?.textContent).toBe('卡')
+    expect(card.textContent).not.toContain('public')
+    expect(card.textContent).not.toContain('dsh-model-allowed')
+    expect(card.textContent).not.toContain('cards/rule/new.md')
+    expect(card.getAttribute('title')).toBe('cards/rule/new.md · public · dsh-model-allowed')
+    const merged = defined(rows.find(row => row.textContent?.includes('合并用的规则卡')))
+    expect(merged.querySelector('.iw-chip')?.textContent).toBe('合并')
+    expect(merged.textContent).not.toContain('client-material')
+    expect(merged.textContent).not.toContain('local-only')
+    expect(merged.getAttribute('title')).toBe('cards/rule/new.md · client-material · local-only')
+    const status = defined(rows.find(row => row.textContent?.includes(CARD_A.title)))
+    expect(status.querySelector('.iw-chip')?.textContent).toBe('状态')
+    expect(status.textContent).not.toContain('public')
+    expect(status.textContent).not.toContain(CARD_A.path)
+    // 生命周期「草稿」留在卡片树，不并进「待确认草稿」。
+    await expandGroups(view)
+    const treeRow = defined(view.all('button.iw-row').find(row =>
+      row.querySelector('.iw-row-meta')?.textContent === '草稿' && row.textContent?.includes(CARD_B.title)))
+    expect(queue.contains(treeRow)).toBe(false)
+    expect(queue.textContent).not.toContain(CARD_B.title)
+    await view.unmount()
+
+    const english = await mount(<LibraryPanel api={stubApi({ drafts: [DRAFT, merge, STATUS_DRAFT] })} localeId="en-US" />)
+    const enQueue = defined(english.all('.iw-section').find(section => section.querySelector('.iw-section-title')?.textContent?.startsWith('Pending drafts')))
+    const enRows = [...enQueue.querySelectorAll('button.iw-row')]
+    expect(enRows.map(row => row.querySelector('.iw-chip')?.textContent)).toEqual(['Card', 'Merge', 'Status'])
+    expect(defined(enRows[0]).textContent).not.toContain('public')
+    expect(defined(enRows[0]).getAttribute('title')).toBe('cards/rule/new.md · public · dsh-model-allowed')
+    await english.unmount()
+  })
+
+  it('marks a lint group read in memory, keeps marks the report still has, and clears them on remount', async () => {
+    const full: LintReport = {
+      scanned: 2,
+      findings: [
+        { tier: 'critical', code: 'empty-body', message: '卡片正文为空', path: CARD_A.path },
+        { tier: 'warning', code: 'broken-link', message: '关联卡片指向不存在的卡：old-9', path: CARD_A.path },
+        { tier: 'suggestion', code: 'unclassified', message: '未归入业务域（domain_l2）', path: CARD_B.path },
+        { tier: 'warning', code: 'index-missing', message: '索引不可读或缺少计数', path: '' },
+        { tier: 'warning', code: 'index-drift', message: '索引计数与磁盘不一致：索引 30 / 磁盘 2', path: '' },
+      ],
+      counts: { critical: 1, warning: 3, suggestion: 1 },
+      failOn: 'warning',
+      verdict: 'fail',
+    }
+    const withoutConcept: LintReport = {
+      ...full,
+      findings: full.findings.filter(finding => finding.path !== CARD_B.path),
+      counts: { critical: 1, warning: 3, suggestion: 0 },
+    }
+    const options: { lint?: LintReport } = { lint: full }
+    const api = stubApi(options)
+    const view = await mount(<LibraryPanel api={api} localeId="zh-CN" />)
+    await view.click(defined(view.one('header.iw-status button.iw-chip')))
+    const group = (path: string): HTMLElement => defined(
+      view.all('.iw-lint-group').find(item => item.getAttribute('data-path') === path),
+    )
+    const markOf = (path: string): Element => defined(group(path).querySelector('button.iw-lint-mark'))
+    expect(group(CARD_A.path).querySelector('.iw-lint-group-counts')?.textContent).toBe('严重 1 · 警告 1')
+    expect(group(CARD_A.path).querySelector('.iw-lint-group-counts')?.textContent).not.toContain('suggestion')
+    expect(group(CARD_A.path).querySelectorAll('.iw-tier-critical')).toHaveLength(1)
+    expect(group(CARD_B.path).querySelector('.iw-lint-group-counts')?.textContent).toBe('suggestion 1')
+    expect(group(CARD_B.path).querySelector('.iw-tier-suggestion')).toBeNull()
+    expect(group('').querySelector('.iw-lint-group-counts')?.textContent).toBe('警告 2')
+    expect(group('').querySelectorAll('.iw-finding')).toHaveLength(2)
+    expect(markOf(CARD_A.path).textContent).toBe('已阅')
+    expect(markOf(CARD_A.path).getAttribute('aria-pressed')).toBe('false')
+
+    await view.click(markOf(CARD_A.path))
+    expect(group(CARD_A.path).getAttribute('data-read')).toBe('true')
+    expect(group(CARD_A.path).querySelector('.iw-finding')).toBeNull()
+    expect(markOf(CARD_A.path).textContent).toBe('取消已阅')
+    expect(markOf(CARD_A.path).getAttribute('aria-pressed')).toBe('true')
+    await view.click(defined(group(CARD_A.path).querySelector('button.iw-lint-fold')))
+    expect(group(CARD_A.path).querySelector('button.iw-lint-fold')?.getAttribute('aria-expanded')).toBe('true')
+    expect(group(CARD_A.path).querySelector('.iw-finding')).not.toBeNull()
+    await view.click(defined(group(CARD_A.path).querySelector('button.iw-lint-fold')))
+    expect(group(CARD_A.path).querySelector('.iw-finding')).toBeNull()
+    await view.click(markOf(CARD_B.path))
+    await view.click(markOf(''))
+
+    await view.click(defined(view.all('button.iw-btn').find(button => button.textContent === '重建索引')))
+    expect(group(CARD_A.path).getAttribute('data-read')).toBe('true')
+    expect(group(CARD_B.path).getAttribute('data-read')).toBe('true')
+    expect(group('').getAttribute('data-read')).toBe('true')
+
+    await view.click(defined(view.all('button.iw-lint-group-title').find(button => button.textContent === CARD_A.path)))
+    expect(view.text()).toContain('第一步')
+    await view.click(defined(view.one('header.iw-status button.iw-chip')))
+    expect(group(CARD_A.path).getAttribute('data-read')).toBe('true')
+    expect(group('').getAttribute('data-read')).toBe('true')
+
+    await view.click(markOf(''))
+    expect(group('').getAttribute('data-read')).toBe('false')
+    expect(group('').querySelectorAll('.iw-finding')).toHaveLength(2)
+
+    options.lint = withoutConcept
+    await view.click(defined(view.all('button.iw-btn').find(button => button.textContent === '重建索引')))
+    expect(view.all('.iw-lint-group').some(item => item.getAttribute('data-path') === CARD_B.path)).toBe(false)
+    expect(group(CARD_A.path).getAttribute('data-read')).toBe('true')
+    expect(group('').getAttribute('data-read')).toBe('false')
+
+    options.lint = full
+    await view.click(defined(view.all('button.iw-btn').find(button => button.textContent === '重建索引')))
+    expect(group(CARD_B.path).getAttribute('data-read')).toBe('false')
+    expect(group(CARD_A.path).getAttribute('data-read')).toBe('true')
+    await view.unmount()
+
+    const again = await mount(<LibraryPanel api={stubApi({ lint: full })} localeId="zh-CN" />)
+    await again.click(defined(again.one('header.iw-status button.iw-chip')))
+    expect(again.all('.iw-lint-group[data-read="true"]')).toHaveLength(0)
+    await again.unmount()
   })
 
   it('reports a failing gate read', async () => {
@@ -997,8 +1142,11 @@ describe('LibraryPanel', () => {
   it('renders a status confirmation and the one line it would change', async () => {
     const api = stubApi({ drafts: [STATUS_DRAFT], draftView: STATUS_VIEW })
     const view = await mount(<LibraryPanel api={api} localeId="zh-CN" />)
-    const row = defined(view.all('button.iw-row-flat').find(button => button.textContent?.includes(CARD_A.path)))
-    expect(row.textContent).toContain('状态确认')
+    const row = defined(view.all('button.iw-row').find(button => button.textContent?.includes(CARD_A.title)))
+    expect(row.querySelector('.iw-chip')?.textContent).toBe('状态')
+    expect(row.textContent).not.toContain('状态确认')
+    expect(row.textContent).not.toContain(CARD_A.path)
+    expect(row.getAttribute('title')).toBe(`${CARD_A.path} · public · dsh-model-allowed`)
     await view.click(row)
     expect(api.calls).toContain('draft:d2')
     const text = view.text()

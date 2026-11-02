@@ -30,4 +30,5 @@ Status: implemented
 
 - 换来：落库成功后门禁摘要跟着 `fetchLint('warning')` 更新；带路径的 finding 打开对应卡片；状态条与左栏用同一套色点。
 - 付出：状态条多一枚 chip；带路径的 finding 是 `button.iw-finding`，库级 finding 仍是 `div`。
+- 后续（2026-11-02）：阅读器改为按 path 分组，打开卡片的点击改到组头；finding 不再重复路径，也不再各自是按钮。见[待确认草稿与门禁分组方案 B1](2026-11-02-lint-draft-queue-scheme-b1.md)。
 - 仍未做：逐卡门禁徽标、Host 规则改动、failOn 界面、finding 忽略持久化、面板内编辑的脏状态、重命名「待确认草稿」。确认批次中途失败时不刷新门禁。

@@ -27,7 +27,7 @@ import type {
 } from '../shared/card'
 import { CARD_TYPE_LABEL } from '../shared/card'
 import type { CardDraft, DraftView } from '../host/drafts'
-import type { LintReport, LintTier } from '../host/lint'
+import type { LintFinding, LintReport, LintTier } from '../host/lint'
 import type { DiffLine } from '../shared/diff'
 import type { HostApi } from './host-api'
 import { Markdown, headingsOf, type WikilinkAccess } from './markdown'
@@ -466,26 +466,160 @@ function DraftReader({ view, t, busy, onConfirm, onDiscard, onOpenCard }: {
 /** The gate's tiers, in the order a reviewer reads them. */
 const LINT_TIERS: readonly LintTier[] = ['critical', 'warning', 'suggestion']
 
+/** 待确认队列行上的短种类。生命周期「草稿」与节标题「待确认草稿」都不走这里。 */
+function draftKindLabel(kind: CardDraft['kind'], t: Messages): string {
+  switch (kind) {
+    case 'card':
+      return t.draftKindCard
+    case 'merge':
+      return t.draftKindMerge
+    case 'status':
+      return t.draftKindStatus
+  }
+}
+
+/** 行内不再展示的目标、分级与策略，留给悬停。 */
+function draftRowMeta(draft: CardDraft): string {
+  return `${draft.target} · ${draft.classification} · ${draft.policy}`
+}
+
+/** 同一 path 的 findings。空 path 是库级组。 */
+interface LintGroup {
+  readonly path: string
+  readonly findings: readonly LintFinding[]
+}
+
+/**
+ * 按 path 分组。
+ *
+ * 卡片路径保持首次出现的顺序；空 path 的库级组固定放在最后。
+ */
+function groupFindings(findings: readonly LintFinding[]): readonly LintGroup[] {
+  const paths: string[] = []
+  for (const finding of findings) {
+    if (!paths.includes(finding.path)) paths.push(finding.path)
+  }
+  const ordered = [...paths.filter(path => path !== ''), ...paths.filter(path => path === '')]
+  return ordered.map(path => ({
+    path,
+    findings: findings.filter(finding => finding.path === path),
+  }))
+}
+
+/** 组头计数。为零的档不写。 */
+function lintGroupCounts(findings: readonly LintFinding[], t: Messages): string {
+  const counts: Record<LintTier, number> = { critical: 0, warning: 0, suggestion: 0 }
+  for (const finding of findings) counts[finding.tier] += 1
+  const parts: string[] = []
+  if (counts.critical > 0) parts.push(`${t.lintStripCritical} ${String(counts.critical)}`)
+  if (counts.warning > 0) parts.push(`${t.lintStripWarning} ${String(counts.warning)}`)
+  if (counts.suggestion > 0) parts.push(`${t.lintSuggestion} ${String(counts.suggestion)}`)
+  return parts.join(' · ')
+}
+
+/**
+ * 同一张卡（或库级）的 findings。
+ *
+ * 组头的路径打开卡片；库级没有卡片，标题不可点。
+ * critical 与 warning 默认展开，suggestion 默认收起。
+ * `read` 为真时整组先收起，并套上淡化。父级用 path 加 read 作 key，
+ * 标记翻转时重新挂载，于是收起状态跟着重置。
+ */
+function LintPathGroup({ path, findings, read, t, onOpenCard, onToggleRead }: {
+  readonly path: string
+  readonly findings: readonly LintFinding[]
+  readonly read: boolean
+  readonly t: Messages
+  readonly onOpenCard: (path: string) => void
+  readonly onToggleRead: (path: string) => void
+}): ReactNode {
+  const [expanded, setExpanded] = useState(!read)
+  const [openTiers, setOpenTiers] = useState<readonly LintTier[]>(['critical', 'warning'])
+  const toggleTier = (tier: LintTier): void => {
+    setOpenTiers(previous => previous.includes(tier)
+      ? previous.filter(item => item !== tier)
+      : [...previous, tier])
+  }
+  return (
+    <div
+      className="iw-lint-group"
+      data-path={path}
+      data-read={read ? 'true' : 'false'}
+      data-library={path === '' ? 'true' : 'false'}
+    >
+      <div className="iw-lint-group-bar">
+        <button
+          type="button"
+          className="iw-lint-fold"
+          aria-expanded={expanded}
+          onClick={() => { setExpanded(value => !value) }}
+        >
+          <span className="iw-caret">{expanded ? '▼' : '▶'}</span>
+        </button>
+        {path === '' ? (
+          <span className="iw-lint-group-title">{t.lintLibraryWide}</span>
+        ) : (
+          <button type="button" className="iw-lint-group-title" onClick={() => { onOpenCard(path) }}>
+            {path}
+          </button>
+        )}
+        <span className="iw-lint-group-counts">{lintGroupCounts(findings, t)}</span>
+        <button
+          type="button"
+          className="iw-btn iw-btn-quiet iw-lint-mark"
+          aria-pressed={read}
+          onClick={() => { onToggleRead(path) }}
+        >
+          {read ? t.lintUnmarkRead : t.lintMarkRead}
+        </button>
+      </div>
+      {!expanded ? null : LINT_TIERS.map(tier => {
+        const inTier = findings.filter(finding => finding.tier === tier)
+        if (inTier.length === 0) return null
+        const isOpen = openTiers.includes(tier)
+        return (
+          <div key={tier} className="iw-finding-group">
+            <button
+              type="button"
+              className="iw-group-head iw-tier-head iw-finding-group-head"
+              data-tier={tier}
+              aria-expanded={isOpen}
+              onClick={() => { toggleTier(tier) }}
+            >
+              <span className="iw-caret">{isOpen ? '▼' : '▶'}</span>
+              <span>{tier}</span>
+              <span className="iw-count">{inTier.length}</span>
+            </button>
+            {!isOpen ? null : inTier.map((finding, index) => (
+              <div key={`${finding.code}-${String(index)}`} className={`iw-finding iw-tier-${finding.tier}`}>
+                <span className="iw-finding-head">{`${finding.tier} · ${finding.code}`}</span>
+                <span className="iw-finding-message">{finding.message}</span>
+              </div>
+            ))}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /** The reader pane for one quality-gate report. */
-function LintReader({ report, t, busy, onRebuild, onOpenCard }: {
+function LintReader({ report, t, busy, readKeys, onToggleRead, onRebuild, onOpenCard }: {
   readonly report: LintReport
   readonly t: Messages
   readonly busy: boolean
+  readonly readKeys: ReadonlySet<string>
+  readonly onToggleRead: (path: string) => void
   readonly onRebuild: () => void
   readonly onOpenCard: (path: string) => void
 }): ReactNode {
-  // A large library reports hundreds of the least serious findings, so the tiers
-  // are folded: the two that need a decision start open, the bulk starts closed.
-  const [open, setOpen] = useState<readonly LintTier[]>(['critical', 'warning'])
-  const toggleTier = (tier: LintTier): void => {
-    setOpen(previous => previous.includes(tier) ? previous.filter(item => item !== tier) : [...previous, tier])
-  }
   const chips = [
     { label: t.lintScanned, value: report.scanned, tone: '' },
     { label: t.lintCritical, value: report.counts.critical, tone: 'iw-chip-error' },
     { label: t.lintWarning, value: report.counts.warning, tone: 'iw-chip-warn' },
     { label: t.lintSuggestion, value: report.counts.suggestion, tone: '' },
   ]
+  const groups = groupFindings(report.findings)
   return (
     <article>
       <h2 className="iw-read-title">{t.lint}</h2>
@@ -508,48 +642,17 @@ function LintReader({ report, t, busy, onRebuild, onOpenCard }: {
         {report.findings.length === 0 ? (
           <div className="iw-empty">{t.lintEmpty}</div>
         ) : (
-          LINT_TIERS.map(tier => {
-            const inTier = report.findings.filter(finding => finding.tier === tier)
-            const isOpen = open.includes(tier)
-            return (
-              <div key={tier} className="iw-finding-group">
-                <button
-                  type="button"
-                  className="iw-group-head iw-tier-head iw-finding-group-head"
-                  data-tier={tier}
-                  aria-expanded={isOpen}
-                  onClick={() => { toggleTier(tier) }}
-                >
-                  <span className="iw-caret">{isOpen ? '▼' : '▶'}</span>
-                  <span>{tier}</span>
-                  <span className="iw-count">{inTier.length}</span>
-                </button>
-                {!isOpen ? null : inTier.map((finding, index) => {
-                  const className = `iw-finding iw-tier-${finding.tier}`
-                  const body = (
-                    <>
-                      <span className="iw-finding-head">{`${finding.tier} · ${finding.code}`}</span>
-                      <span className="iw-finding-path">{finding.path === '' ? t.lintLibraryWide : finding.path}</span>
-                      <span className="iw-finding-message">{finding.message}</span>
-                    </>
-                  )
-                  // An empty path is a library-wide finding: there is no card to open.
-                  return finding.path === '' ? (
-                    <div key={`f${tier}-${String(index)}`} className={className}>{body}</div>
-                  ) : (
-                    <button
-                      key={`f${tier}-${String(index)}`}
-                      type="button"
-                      className={className}
-                      onClick={() => { onOpenCard(finding.path) }}
-                    >
-                      {body}
-                    </button>
-                  )
-                })}
-              </div>
-            )
-          })
+          groups.map(group => (
+            <LintPathGroup
+              key={`${group.path}\u0000${readKeys.has(group.path) ? '1' : '0'}`}
+              path={group.path}
+              findings={group.findings}
+              read={readKeys.has(group.path)}
+              t={t}
+              onOpenCard={onOpenCard}
+              onToggleRead={onToggleRead}
+            />
+          ))
         )}
       </section>
     </article>
@@ -592,6 +695,8 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
   const [drafts, setDrafts] = useState<readonly CardDraft[]>([])
   const [landed, setLanded] = useState<{ readonly ids: readonly string[]; readonly summary: string } | null>(null)
   const [lint, setLint] = useState<LintReport | null>(null)
+  // 「已阅」只活在这次面板挂载里。键是 path，库级用空字符串。不写 Host、不落盘。
+  const [lintRead, setLintRead] = useState<ReadonlySet<string>>(() => new Set())
   // A batch writes one card at a time, so it asks before it starts and then
   // reports how far it got: nine hundred confirmations must not run silently.
   const [confirmingAll, setConfirmingAll] = useState(false)
@@ -619,11 +724,36 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
 
   const refreshLint = useCallback(async (): Promise<void> => {
     try {
-      setLint(await api.fetchLint('warning'))
+      const report = await api.fetchLint('warning')
+      setLint(report)
+      setSelection(previous => previous?.kind === 'lint' ? { kind: 'lint', report } : previous)
     } catch (cause) {
       setFailed(describe(cause))
     }
   }, [api])
+
+  // 报告换过之后，已经不在报告里的 path 不再保留已阅。还在的键留着。
+  useEffect(() => {
+    const alive = new Set(lint === null ? [] : lint.findings.map(finding => finding.path))
+    setLintRead(previous => {
+      let dropped = false
+      const next = new Set<string>()
+      for (const key of previous) {
+        if (alive.has(key)) next.add(key)
+        else dropped = true
+      }
+      return dropped ? next : previous
+    })
+  }, [lint])
+
+  const toggleLintRead = useCallback((path: string): void => {
+    setLintRead(previous => {
+      const next = new Set(previous)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  }, [])
 
   /**
    * Read the library again after the notice reported a failure. A success
@@ -991,16 +1121,14 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
                       <button
                         key={draft.id}
                         type="button"
-                        title={draft.target}
+                        title={draftRowMeta(draft)}
                         className={selection?.kind === 'draft' && selection.view.draft.id === draft.id
                           ? 'iw-row iw-row-line iw-row-flat iw-row-selected'
                           : 'iw-row iw-row-line iw-row-flat'}
                         onClick={() => { void openDraft(draft.id) }}
                       >
                         <span className="iw-row-title">{draft.title === '' ? draft.target : draft.title}</span>
-                        <span className="iw-row-meta">
-                          {`${draft.kind === 'status' ? `${t.statusConfirm} · ` : ''}${draft.target} · ${draft.classification} · ${draft.policy}`}
-                        </span>
+                        <span className="iw-chip">{draftKindLabel(draft.kind, t)}</span>
                       </button>
                     ))
                   )}
@@ -1176,6 +1304,8 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
               report={selection.report}
               t={t}
               busy={busy}
+              readKeys={lintRead}
+              onToggleRead={toggleLintRead}
               onRebuild={() => { void rebuild() }}
               onOpenCard={(path) => { void openCard(path) }}
             />
