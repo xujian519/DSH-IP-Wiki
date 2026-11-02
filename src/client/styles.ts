@@ -164,7 +164,7 @@ button.iw-chip:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .iw-btn-danger:hover { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent); }
 .iw-btn:disabled { opacity: 0.55; cursor: default; }
 .iw-btn:disabled:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent); }
-.iw-input:focus-visible, .iw-btn:focus-visible, .iw-status-toggle:focus-visible, .iw-row:focus-visible, .iw-group-head:focus-visible, .iw-hit-open:focus-visible, .iw-hit-source summary:focus-visible, button.iw-chip:focus-visible, button.iw-finding:focus-visible {
+.iw-input:focus-visible, .iw-btn:focus-visible, .iw-status-toggle:focus-visible, .iw-row:focus-visible, .iw-group-head:focus-visible, .iw-hit-open:focus-visible, .iw-hit-source summary:focus-visible, button.iw-chip:focus-visible, .iw-lint-fold:focus-visible, button.iw-lint-group-title:focus-visible {
   outline: 2px solid var(--dsw-alias-brand-primary);
   outline-offset: 1px;
 }
@@ -274,6 +274,7 @@ button.iw-chip:hover { background: var(--dsw-alias-interactive-bg-hover); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.iw-row-line > .iw-chip { flex: none; }
 .iw-row-title { display: block; }
 .iw-row-meta { display: block; margin-top: 2px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .iw-row-flat { padding-left: 8px; }
@@ -469,6 +470,60 @@ button.iw-chip:hover { background: var(--dsw-alias-interactive-bg-hover); }
   white-space: nowrap;
 }
 .iw-finding-group-head { font-size: 12px; font-weight: 500; }
+/* 一条 path 一组。已阅只改颜色，不另上状态色。 */
+.iw-lint-group { margin: 8px 0; }
+.iw-lint-group[data-read='true'] { color: var(--dsw-alias-label-secondary); }
+.iw-lint-group-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+}
+.iw-lint-fold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.iw-lint-fold:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.iw-lint-group-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+}
+button.iw-lint-group-title {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+button.iw-lint-group-title:hover { color: var(--dsw-alias-link); }
+.iw-lint-group-counts {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.iw-lint-mark { flex: none; padding: 1px 7px; font-size: 11px; }
 .iw-tier-head[data-tier='critical'] { box-shadow: inset 2px 0 0 var(--dsw-alias-state-error-primary); }
 .iw-tier-head[data-tier='warning'] { box-shadow: inset 2px 0 0 var(--dsw-alias-state-warn-primary); }
 .iw-tier-head[data-tier='suggestion'] { box-shadow: inset 2px 0 0 var(--dsw-alias-border-l2); }
@@ -534,21 +589,7 @@ button.iw-chip:hover { background: var(--dsw-alias-interactive-bg-hover); }
    state-idle is 1.47:1 on white, so the tier takes a visible neutral instead. */
 .iw-tier-suggestion { border-left-color: var(--dsw-alias-border-l2); }
 .iw-finding-head { display: block; font-weight: 500; font-variant-numeric: tabular-nums; }
-.iw-finding-path { display: block; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
 .iw-finding-message { display: block; }
-/* A finding that names a card is a button; a library-wide finding stays a div. */
-button.iw-finding {
-  width: 100%;
-  border-top: 0;
-  border-right: 0;
-  border-bottom: 0;
-  background: transparent;
-  color: inherit;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-button.iw-finding:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .iw-diff-same { color: var(--dsw-alias-label-secondary); }
 /* The diff is the only thing a reviewer reads before confirming, and success
    green is 2.28:1 on white: the sign in the row carries the direction, so the
