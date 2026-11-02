@@ -33,3 +33,4 @@ Status: implemented
 - 付出：`DraftKind` 多了第三档 `'status'`，`viewDraft` / `confirmDraft` 各多一条按磁盘现算的分支；面板的"落库横幅"从单份变成"一份或一批"（`landed.ids`），批量失败时横幅只覆盖已落库的那些。
 - 遗留：**真实迁移脚本仍会直写 `cards/`**（那是仓库外的库侧工具，本次只补了它的补救路径与规范条目）；Wiki 批次（1,235 页）尚未迁移。
 - 后续（2026-09-29）：这条决策让 `draft` 与 `deprecated` 都"可见但被标出"。合并落库后真机暴露：`deprecated` 只是被标出、仍能排到在用卡前面。**已废弃现在排在所有在用卡之后**（`docs/notes/implemented/2026-09-29-deprecated-cards-rank-last.md`）；`draft` 的可见性不变。
+- 后续（2026-11-02）：状态条默认档只留未确认（有则）。已确认数还在，收到「详情」（[卡片树与状态条方案 A](2026-11-02-tree-status-scheme-a.md)）。

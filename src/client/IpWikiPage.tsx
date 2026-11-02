@@ -105,6 +105,22 @@ function driftOf(drift: IndexDrift, t: Messages): { text: string; tone: string }
   }
 }
 
+/**
+ * 树行悬停文案：标题始终在，概念和相关条数只在有内容时附上。
+ * 筛选把分组拿掉之后，卡型也放进悬停，行内仍只留状态。
+ */
+function cardRowTitle(
+  card: { readonly title: string; readonly concept: string; readonly relatedCount: number },
+  t: Messages,
+  typeLabel = '',
+): string {
+  const parts = [card.title]
+  if (typeLabel !== '') parts.push(typeLabel)
+  if (card.concept !== '') parts.push(`${t.concept} ${card.concept}`)
+  if (card.relatedCount > 0) parts.push(`${t.related} ${String(card.relatedCount)}`)
+  return parts.join(' · ')
+}
+
 /** The lifecycle status's copy. */
 function statusText(status: string, t: Messages): string {
   switch (status) {
@@ -138,25 +154,44 @@ function Fact({ name, value }: { readonly name: string; readonly value: string }
   )
 }
 
-/** The status strip: what the library holds and whether its derived index agrees. */
+/**
+ * 状态条两档。
+ *
+ * 默认一行只回答「库有多大、有没有未确认、索引健不健康、有没有待审」。
+ * 卡型分项、整理报告数，以及已确认数和索引生成时间，收在「详情」里。
+ */
 function StatusStrip({ status, t }: { readonly status: LibraryStatus; readonly t: Messages }): ReactNode {
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const drift = driftOf(status.indexDrift, t)
   const unconfirmed = status.counts.byStatus['draft'] ?? 0
   const confirmed = status.counts.byStatus['confirmed'] ?? 0
   return (
     <header className="iw-head iw-status">
-      <Chip label={t.cards} value={status.counts.total} />
-      {Object.entries(status.counts.byType).map(([type, count]) => (
-        <Chip key={type} label={CARD_TYPE_LABEL[type as keyof typeof CARD_TYPE_LABEL] ?? type} value={count} />
-      ))}
-      {unconfirmed === 0 ? null : <Chip label={t.unconfirmed} value={unconfirmed} tone="iw-chip-warn" />}
-      {confirmed === 0 ? null : <Chip label={t.statusConfirmed} value={confirmed} tone="iw-chip-ok" />}
-      <Chip label={t.index} value={status.indexGeneratedAt ?? t.indexMissing} />
-      <span className={`iw-chip ${drift.tone}`}>{drift.text}</span>
-      <Chip label={t.reports} value={status.reports.length} />
-      {status.needsReview.length === 0 ? null : (
-        <Chip label={t.reviewQueue} value={status.needsReview.length} tone="iw-chip-warn" />
-      )}
+      <div className="iw-status-main">
+        <Chip label={t.cards} value={status.counts.total} />
+        {unconfirmed === 0 ? null : <Chip label={t.unconfirmed} value={unconfirmed} tone="iw-chip-warn" />}
+        <span className={`iw-chip ${drift.tone}`}>{drift.text}</span>
+        {status.needsReview.length === 0 ? null : (
+          <Chip label={t.reviewStrip} value={status.needsReview.length} tone="iw-chip-warn" />
+        )}
+        <button
+          type="button"
+          className="iw-status-toggle"
+          aria-expanded={detailsOpen}
+          onClick={() => { setDetailsOpen(open => !open) }}
+        >
+          <span className="iw-caret" aria-hidden="true">{detailsOpen ? '▼' : '▶'}</span>
+          {t.statusDetails}
+        </button>
+      </div>
+      <div className="iw-status-extra" hidden={!detailsOpen}>
+        {Object.entries(status.counts.byType).map(([type, count]) => (
+          <Chip key={type} label={CARD_TYPE_LABEL[type as keyof typeof CARD_TYPE_LABEL] ?? type} value={count} />
+        ))}
+        <Chip label={t.reports} value={status.reports.length} />
+        {confirmed === 0 ? null : <Chip label={t.statusConfirmed} value={confirmed} tone="iw-chip-ok" />}
+        <Chip label={t.index} value={status.indexGeneratedAt ?? t.indexMissing} />
+      </div>
     </header>
   )
 }
@@ -745,6 +780,7 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
     ? []
     : branches.flatMap(branch => branch.groups.flatMap(group => group.cards))
       .filter(card => card.title.toLowerCase().includes(needle))
+  const groupCount = branches.reduce((sum, branch) => sum + branch.groups.length, 0)
 
   return (
     <div className="iw-root">
@@ -807,227 +843,231 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
       )}
       <div className="iw-body">
         <nav className="iw-tree">
-          <div className="iw-search">
-            <input
-              className="iw-input"
-              type="search"
-              value={query}
-              placeholder={t.searchPlaceholder}
-              aria-label={t.search}
-              onChange={(event) => { setQuery(event.target.value) }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') void runSearch()
-              }}
-            />
-            <button type="button" className="iw-btn" disabled={searching} onClick={() => { void runSearch() }}>
-              {t.searchRun}
-            </button>
-            {submitted === '' ? null : (
-              <button type="button" className="iw-btn iw-btn-quiet" onClick={clearSearch}>{t.searchClear}</button>
-            )}
+          <div className="iw-tree-pin">
+            <div className="iw-search">
+              <input
+                className="iw-input"
+                type="search"
+                value={query}
+                placeholder={t.searchPlaceholder}
+                aria-label={t.search}
+                onChange={(event) => { setQuery(event.target.value) }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void runSearch()
+                }}
+              />
+              <button type="button" className="iw-btn" disabled={searching} onClick={() => { void runSearch() }}>
+                {t.searchRun}
+              </button>
+              {submitted === '' ? null : (
+                <button type="button" className="iw-btn iw-btn-quiet" onClick={clearSearch}>{t.searchClear}</button>
+              )}
+            </div>
+            <div className="iw-filter">
+              <input
+                className="iw-filter-input"
+                type="search"
+                value={filter}
+                placeholder={t.filterPlaceholder}
+                aria-label={t.filterPlaceholder}
+                disabled={submitted !== ''}
+                onChange={(event) => { setFilter(event.target.value) }}
+              />
+            </div>
           </div>
-          {searching ? <div className="iw-empty">{t.searching}</div> : null}
-          {submitted === '' ? (
-            <>
-              <section className="iw-section">
-                <div className="iw-section-title">{t.drafts}（{drafts.length}）</div>
-                {drafts.length === 0 || !confirmingAll ? null : (
-                  <div className="iw-confirm">
-                    <span className="iw-confirm-ask">{t.confirmAllAsk}</span>
-                    <span className="iw-spacer" />
-                    <button type="button" className="iw-btn iw-btn-primary" onClick={() => { void confirmAll() }}>
-                      {t.confirmAllYes}
-                    </button>
-                    <button type="button" className="iw-btn iw-btn-quiet" onClick={() => { setConfirmingAll(false) }}>
-                      {t.cancel}
-                    </button>
-                  </div>
-                )}
-                {drafts.length === 0 ? null : (
-                  <div className="iw-actions">
-                    <button
-                      type="button"
-                      className="iw-btn iw-btn-primary"
-                      disabled={busy}
-                      onClick={() => { setConfirmingAll(true) }}
-                    >
-                      {t.confirmAll}（{drafts.length}）
-                    </button>
-                  </div>
-                )}
-                {drafts.length === 0 ? (
-                  <div className="iw-empty">{t.draftsEmpty}</div>
-                ) : (
-                  drafts.map(draft => (
-                    <button
-                      key={draft.id}
-                      type="button"
-                      title={draft.target}
-                      className={selection?.kind === 'draft' && selection.view.draft.id === draft.id
-                        ? 'iw-row iw-row-line iw-row-flat iw-row-selected'
-                        : 'iw-row iw-row-line iw-row-flat'}
-                      onClick={() => { void openDraft(draft.id) }}
-                    >
-                      <span className="iw-row-title">{draft.title === '' ? draft.target : draft.title}</span>
-                      <span className="iw-row-meta">
-                        {`${draft.kind === 'status' ? `${t.statusConfirm} · ` : ''}${draft.target} · ${draft.classification} · ${draft.policy}`}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </section>
-              <section className="iw-section">
-                <div className="iw-section-title">{t.lint}</div>
-                {lint === null ? (
-                  <div className="iw-empty">{t.loading}</div>
-                ) : (
-                  <button
-                    type="button"
-                    className={selection?.kind === 'lint' ? 'iw-row iw-row-line iw-row-flat iw-row-selected' : 'iw-row iw-row-line iw-row-flat'}
-                    onClick={openLint}
-                  >
-                    <span className="iw-row-title">{lint.verdict === 'pass' ? `✅ ${t.lintPass}` : `❌ ${t.lintFail}`}</span>
-                    <span className="iw-row-meta">
-                      {`${t.lintCritical} ${String(lint.counts.critical)} · ${t.lintWarning} ${String(lint.counts.warning)} · ${t.lintSuggestion} ${String(lint.counts.suggestion)}`}
-                    </span>
-                  </button>
-                )}
-              </section>
-              {status !== undefined && status.needsReview.length > 0 ? (
+          <div className="iw-tree-scroll">
+            {searching ? <div className="iw-empty">{t.searching}</div> : null}
+            {submitted === '' ? (
+              <>
                 <section className="iw-section">
-                  <div className="iw-section-title">{t.reviewQueue}（{status.needsReview.length}）</div>
-                  {status.needsReview.map(card => (
+                  <div className="iw-section-title">{t.drafts}（{drafts.length}）</div>
+                  {drafts.length === 0 || !confirmingAll ? null : (
+                    <div className="iw-confirm">
+                      <span className="iw-confirm-ask">{t.confirmAllAsk}</span>
+                      <span className="iw-spacer" />
+                      <button type="button" className="iw-btn iw-btn-primary" onClick={() => { void confirmAll() }}>
+                        {t.confirmAllYes}
+                      </button>
+                      <button type="button" className="iw-btn iw-btn-quiet" onClick={() => { setConfirmingAll(false) }}>
+                        {t.cancel}
+                      </button>
+                    </div>
+                  )}
+                  {drafts.length === 0 ? null : (
+                    <div className="iw-actions">
+                      <button
+                        type="button"
+                        className="iw-btn iw-btn-primary"
+                        disabled={busy}
+                        onClick={() => { setConfirmingAll(true) }}
+                      >
+                        {t.confirmAll}（{drafts.length}）
+                      </button>
+                    </div>
+                  )}
+                  {drafts.length === 0 ? (
+                    <div className="iw-empty">{t.draftsEmpty}</div>
+                  ) : (
+                    drafts.map(draft => (
+                      <button
+                        key={draft.id}
+                        type="button"
+                        title={draft.target}
+                        className={selection?.kind === 'draft' && selection.view.draft.id === draft.id
+                          ? 'iw-row iw-row-line iw-row-flat iw-row-selected'
+                          : 'iw-row iw-row-line iw-row-flat'}
+                        onClick={() => { void openDraft(draft.id) }}
+                      >
+                        <span className="iw-row-title">{draft.title === '' ? draft.target : draft.title}</span>
+                        <span className="iw-row-meta">
+                          {`${draft.kind === 'status' ? `${t.statusConfirm} · ` : ''}${draft.target} · ${draft.classification} · ${draft.policy}`}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </section>
+                <section className="iw-section">
+                  <div className="iw-section-title">{t.lint}</div>
+                  {lint === null ? (
+                    <div className="iw-empty">{t.loading}</div>
+                  ) : (
                     <button
-                      key={`review-${card.path}`}
                       type="button"
-                      title={card.title}
-                      className={card.path === selectedPath ? 'iw-row iw-row-line iw-row-flat iw-row-selected' : 'iw-row iw-row-line iw-row-flat'}
-                      onClick={() => { void openCard(card.path) }}
+                      className={selection?.kind === 'lint' ? 'iw-row iw-row-line iw-row-flat iw-row-selected' : 'iw-row iw-row-line iw-row-flat'}
+                      onClick={openLint}
                     >
-                      <span className="iw-row-title">{card.title}</span>
+                      <span className="iw-row-title">{lint.verdict === 'pass' ? `✅ ${t.lintPass}` : `❌ ${t.lintFail}`}</span>
                       <span className="iw-row-meta">
-                        {CARD_TYPE_LABEL[card.type]}
-                        {` · ${t.confidence} ${card.confidence.toFixed(2)}`}
+                        {`${t.lintCritical} ${String(lint.counts.critical)} · ${t.lintWarning} ${String(lint.counts.warning)} · ${t.lintSuggestion} ${String(lint.counts.suggestion)}`}
                       </span>
                     </button>
-                  ))}
+                  )}
                 </section>
-              ) : null}
-              <section className="iw-section">
-                <div className="iw-section-title">
-                  {t.treeTitle}
-                  <span className="iw-chip">{t.expandHint}</span>
-                </div>
-                <div className="iw-filter">
-                  <input
-                    className="iw-filter-input"
-                    type="search"
-                    value={filter}
-                    placeholder={t.filterPlaceholder}
-                    aria-label={t.filterPlaceholder}
-                    onChange={(event) => { setFilter(event.target.value) }}
-                  />
-                </div>
-                {branches.length === 0 ? (
-                  <div className="iw-empty">{t.cardsEmpty}</div>
-                ) : needle !== '' ? (
-                  matches.length === 0 ? (
-                    <div className="iw-empty">{t.filterEmpty}</div>
-                  ) : (
-                    matches.map(card => (
+                {status !== undefined && status.needsReview.length > 0 ? (
+                  <section className="iw-section">
+                    <div className="iw-section-title">{t.reviewQueue}（{status.needsReview.length}）</div>
+                    {status.needsReview.map(card => (
                       <button
-                        key={`match-${card.path}`}
+                        key={`review-${card.path}`}
                         type="button"
                         title={card.title}
                         className={card.path === selectedPath ? 'iw-row iw-row-line iw-row-flat iw-row-selected' : 'iw-row iw-row-line iw-row-flat'}
                         onClick={() => { void openCard(card.path) }}
                       >
                         <span className="iw-row-title">{card.title}</span>
-                        <span className="iw-row-meta">{CARD_TYPE_LABEL[card.type]}</span>
+                        <span className="iw-row-meta">
+                          {CARD_TYPE_LABEL[card.type]}
+                          {` · ${t.confidence} ${card.confidence.toFixed(2)}`}
+                        </span>
+                      </button>
+                    ))}
+                  </section>
+                ) : null}
+                <section className="iw-section">
+                  <div className="iw-section-title">
+                    {t.treeTitle}
+                    {needle !== '' ? null : (
+                      <span className="iw-section-count">（{groupCount} {t.groups}）</span>
+                    )}
+                    <span className="iw-chip">{t.expandHint}</span>
+                  </div>
+                  {branches.length === 0 ? (
+                    <div className="iw-empty">{t.cardsEmpty}</div>
+                  ) : needle !== '' ? (
+                    matches.length === 0 ? (
+                      <div className="iw-empty">{t.filterEmpty}</div>
+                    ) : (
+                      matches.map(card => (
+                        <button
+                          key={`match-${card.path}`}
+                          type="button"
+                          title={cardRowTitle(card, t, CARD_TYPE_LABEL[card.type])}
+                          className={card.path === selectedPath ? 'iw-row iw-row-line iw-row-flat iw-row-selected' : 'iw-row iw-row-line iw-row-flat'}
+                          onClick={() => { void openCard(card.path) }}
+                        >
+                          <span className="iw-row-title">{card.title}</span>
+                          <span className="iw-row-meta">{statusText(card.status, t)}</span>
+                        </button>
+                      ))
+                    )
+                  ) : (
+                    branches.map(branch => (
+                      <div key={branch.type} className="iw-group">
+                        <div className="iw-section-title">{branch.label}（{branch.total}）</div>
+                        {branch.groups.map(group => {
+                          const isCollapsed = !expanded.includes(group.key)
+                          return (
+                            <div key={group.key}>
+                              <button
+                                type="button"
+                                className="iw-group-head"
+                                aria-expanded={!isCollapsed}
+                                onClick={() => { toggle(group.key) }}
+                              >
+                                <span className="iw-caret">{isCollapsed ? '▶' : '▼'}</span>
+                                <span>{group.label}</span>
+                                <span className="iw-count">{group.cards.length}</span>
+                              </button>
+                              {isCollapsed ? null : group.cards.map(card => (
+                                <button
+                                  key={card.path}
+                                  type="button"
+                                  title={cardRowTitle(card, t)}
+                                  className={card.path === selectedPath ? 'iw-row iw-row-line iw-row-selected' : 'iw-row iw-row-line'}
+                                  onClick={() => { void openCard(card.path) }}
+                                >
+                                  <span className="iw-row-title">{card.title}</span>
+                                  <span className="iw-row-meta">{statusText(card.status, t)}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ))
+                  )}
+                </section>
+                <section className="iw-section">
+                  <div className="iw-section-title">{t.reports}（{reports.length}）</div>
+                  {reports.length === 0 ? (
+                    <div className="iw-empty">{t.reportsEmpty}</div>
+                  ) : (
+                    reports.map(name => (
+                      <button
+                        key={name}
+                        type="button"
+                        title={name}
+                        className={name === selectedReport ? 'iw-row iw-row-line iw-row-flat iw-row-selected' : 'iw-row iw-row-line iw-row-flat'}
+                        onClick={() => { void openReport(name) }}
+                      >
+                        <span className="iw-row-title">{name}</span>
                       </button>
                     ))
-                  )
-                ) : (
-                  branches.map(branch => (
-                    <div key={branch.type} className="iw-group">
-                      <div className="iw-section-title">{branch.label}（{branch.total}）</div>
-                      {branch.groups.map(group => {
-                        const isCollapsed = !expanded.includes(group.key)
-                        return (
-                          <div key={group.key}>
-                            <button
-                              type="button"
-                              className="iw-group-head"
-                              aria-expanded={!isCollapsed}
-                              onClick={() => { toggle(group.key) }}
-                            >
-                              <span className="iw-caret">{isCollapsed ? '▶' : '▼'}</span>
-                              <span>{group.label}</span>
-                              <span className="iw-count">{group.cards.length}</span>
-                            </button>
-                            {isCollapsed ? null : group.cards.map(card => (
-                              <button
-                                key={card.path}
-                                type="button"
-                                title={card.title}
-                                className={card.path === selectedPath ? 'iw-row iw-row-line iw-row-selected' : 'iw-row iw-row-line'}
-                                onClick={() => { void openCard(card.path) }}
-                              >
-                                <span className="iw-row-title">{card.title}</span>
-                                <span className="iw-row-meta">
-                                  {statusText(card.status, t)}
-                                  {card.concept === '' ? '' : ` · ${card.concept}`}
-                                  {card.relatedCount === 0 ? '' : ` · ${t.related} ${String(card.relatedCount)}`}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ))
-                )}
-              </section>
+                  )}
+                </section>
+              </>
+            ) : (
               <section className="iw-section">
-                <div className="iw-section-title">{t.reports}</div>
-                {reports.length === 0 ? (
-                  <div className="iw-empty">{t.reportsEmpty}</div>
-                ) : (
-                  reports.map(name => (
-                    <button
-                      key={name}
-                      type="button"
-                      title={name}
-                      className={name === selectedReport ? 'iw-row iw-row-line iw-row-flat iw-row-selected' : 'iw-row iw-row-line iw-row-flat'}
-                      onClick={() => { void openReport(name) }}
-                    >
-                      <span className="iw-row-title">{name}</span>
-                    </button>
-                  ))
-                )}
+                <div className="iw-section-title">
+                  {t.searchResults}（{found === null ? 0 : found.hits.length}）
+                  {found === null ? '' : ` · ${modeLabel(found.mode, t)} · ${t.scanned} ${String(found.scanned)}`}
+                  {found === null || found.deprecated === 0 ? '' : ` · ${t.statusDeprecated} ${String(found.deprecated)}`}
+                  {found === null || found.duplicates === 0 ? '' : ` · ${t.nearDuplicates} ${String(found.duplicates)}`}
+                </div>
+                {found !== null && found.degraded !== '' ? <div className="iw-notice">{found.degraded}</div> : null}
+                {found !== null && found.hits.length === 0 ? <div className="iw-empty">{t.searchNoHits}</div> : null}
+                {(found === null ? [] : found.hits).map(hit => (
+                  <HitRow
+                    key={hit.path}
+                    hit={hit}
+                    t={t}
+                    selected={hit.path === selectedPath}
+                    onOpen={(path) => { void openCard(path) }}
+                  />
+                ))}
               </section>
-            </>
-          ) : (
-            <section className="iw-section">
-              <div className="iw-section-title">
-                {t.searchResults}（{found === null ? 0 : found.hits.length}）
-                {found === null ? '' : ` · ${modeLabel(found.mode, t)} · ${t.scanned} ${String(found.scanned)}`}
-                {found === null || found.deprecated === 0 ? '' : ` · ${t.statusDeprecated} ${String(found.deprecated)}`}
-                {found === null || found.duplicates === 0 ? '' : ` · ${t.nearDuplicates} ${String(found.duplicates)}`}
-              </div>
-              {found !== null && found.degraded !== '' ? <div className="iw-notice">{found.degraded}</div> : null}
-              {found !== null && found.hits.length === 0 ? <div className="iw-empty">{t.searchNoHits}</div> : null}
-              {(found === null ? [] : found.hits).map(hit => (
-                <HitRow
-                  key={hit.path}
-                  hit={hit}
-                  t={t}
-                  selected={hit.path === selectedPath}
-                  onOpen={(path) => { void openCard(path) }}
-                />
-              ))}
-            </section>
-          )}
+            )}
+          </div>
         </nav>
         <main className="iw-read">
           {selection === null ? (

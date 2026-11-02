@@ -96,6 +96,20 @@ describe('libraryStyles', () => {
     expect(css).toContain('.iw-btn-primary')
   })
 
+  it('pins the tree controls and keeps a card row one line tall', () => {
+    const css = libraryStyles()
+    const tree = css.slice(css.indexOf('.iw-tree {'))
+    const treeRule = tree.slice(0, tree.indexOf('}'))
+    expect(treeRule).toContain('flex-direction: column')
+    expect(treeRule).toContain('overflow: hidden')
+    const scroll = css.slice(css.indexOf('.iw-tree-scroll {'))
+    expect(scroll.slice(0, scroll.indexOf('}'))).toContain('overflow-y: auto')
+    const row = css.slice(css.indexOf('.iw-row-line {'))
+    expect(row.slice(0, row.indexOf('}'))).toContain('min-height: 30px')
+    // author display:flex 会盖过 [hidden]，必须单独收回，详情收起时第二行才真的不占位。
+    expect(css).toContain('.iw-status-extra[hidden] { display: none; }')
+  })
+
   it('styles every class the client components use', () => {
     const css = libraryStyles()
     const directory = join(process.cwd(), 'src', 'client')

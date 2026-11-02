@@ -335,6 +335,34 @@ describe('LibraryPanel', () => {
     await view.unmount()
   })
 
+  it('keeps the status strip to the totals until details is opened', async () => {
+    const view = await mount(<LibraryPanel api={stubApi()} localeId="zh-CN" />)
+    const main = view.one('.iw-status-main')
+    // 默认档只留总数、未确认、漂移和待审。卡型、报告、已确认和索引时间在详情里。
+    expect(main.textContent).toContain('卡片2')
+    expect(main.textContent).toContain('未确认1')
+    expect(main.textContent).toContain('索引与卡片一致')
+    expect(main.textContent).toContain('待审1')
+    expect(main.textContent).not.toContain('规则卡')
+    expect(main.textContent).not.toContain('整理报告')
+    expect(main.textContent).not.toContain('已确认')
+    expect(main.textContent).not.toContain('2026-09-29')
+    const extra = view.one('.iw-status-extra')
+    expect(extra.hasAttribute('hidden')).toBe(true)
+    expect(view.one('button.iw-status-toggle').getAttribute('aria-expanded')).toBe('false')
+    expect(extra.textContent).toContain('规则卡1')
+    expect(extra.textContent).toContain('概念卡1')
+    expect(extra.textContent).toContain('整理报告1')
+    expect(extra.textContent).toContain('已确认1')
+    expect(extra.textContent).toContain('2026-09-29T18:52:51+08:00')
+    await view.click(view.one('button.iw-status-toggle'))
+    expect(view.one('.iw-status-extra').hasAttribute('hidden')).toBe(false)
+    expect(view.one('button.iw-status-toggle').getAttribute('aria-expanded')).toBe('true')
+    await view.click(view.one('button.iw-status-toggle'))
+    expect(view.one('.iw-status-extra').hasAttribute('hidden')).toBe(true)
+    await view.unmount()
+  })
+
   it('opens a card and renders its facts and body', async () => {
     const api = stubApi()
     const view = await mount(<LibraryPanel api={api} localeId="zh-CN" />)
@@ -539,6 +567,10 @@ describe('LibraryPanel', () => {
     const view = await mount(<LibraryPanel api={stubApi()} localeId="en-US" />)
     expect(view.text()).toContain('IP Knowledge Wiki')
     expect(view.text()).toContain('Card tree')
+    expect(view.text()).toContain('Details')
+    expect(view.text()).toContain('（2 groups）')
+    expect(view.input('input.iw-input').getAttribute('placeholder')).toBe('Ask to search')
+    expect(view.input('input.iw-filter-input').getAttribute('placeholder')).toBe('Filter titles (this tree)')
     await view.unmount()
   })
 
@@ -554,9 +586,11 @@ describe('LibraryPanel', () => {
     expect(text).toContain('创造性判断的三步法')
     expect(text).toContain('三步法的第一步是确定最接近的现有技术。')
     expect(text).toContain('专利法第 22 条第 3 款')
-    // The results replace the tree; the only place the word "tree" still shows is
-    // the button that goes back to it.
+    // The results replace the scrolling tree. The pinned ask box and title filter stay.
     expect(view.all('div.iw-group')).toHaveLength(0)
+    expect(view.one('.iw-tree-pin input.iw-input')).toBeTruthy()
+    expect(view.input('.iw-tree-pin input.iw-filter-input').disabled).toBe(true)
+    expect(view.one('.iw-tree-scroll').querySelector('input')).toBeNull()
     await view.unmount()
   })
 
@@ -956,6 +990,10 @@ describe('LibraryPanel', () => {
     const view = await mount(<LibraryPanel api={api} localeId="zh-CN" />)
     const ask = defined(view.all('button.iw-btn').find(button => button.textContent?.startsWith('全部确认')))
     await view.click(ask)
+    // 左树的确认行保持单行，不套阅读器那条上下布局。
+    const confirm = view.one('nav.iw-tree .iw-confirm')
+    expect(confirm.classList.contains('iw-confirm-stack')).toBe(false)
+    expect(confirm.querySelector('.iw-confirm-actions')).toBeNull()
     // The count rides on the button, and the first click only asks.
     expect(view.text()).toContain('全部确认（2）')
     expect(view.text()).toContain('可整批回滚')
@@ -1049,6 +1087,30 @@ describe('LibraryPanel', () => {
     await other.unmount()
   })
 
+  it('pins search and the title filter, and keeps only status on a tree row', async () => {
+    const view = await mount(<LibraryPanel api={stubApi()} localeId="zh-CN" />)
+    const pin = view.one('.iw-tree-pin')
+    const scroll = view.one('.iw-tree-scroll')
+    expect(pin.querySelector('input.iw-input')?.getAttribute('placeholder')).toBe('提问检索')
+    expect(view.input('.iw-tree-pin input.iw-filter-input').placeholder).toBe('筛选标题（本树）')
+    expect(view.input('.iw-tree-pin input.iw-filter-input').disabled).toBe(false)
+    expect(scroll.contains(pin)).toBe(false)
+    expect(scroll.querySelector('input')).toBeNull()
+    expect(scroll.querySelectorAll('.iw-group').length).toBeGreaterThan(0)
+    expect(view.text()).toContain('卡片树（2 组）')
+    expect(view.text()).toContain('整理报告（1）')
+    await expandGroups(view)
+    const row = defined(view.all('button.iw-row').find(button =>
+      button.textContent?.includes('创造性判断的三步法') === true && !button.className.includes('iw-row-flat')))
+    expect(row.querySelector('.iw-row-meta')?.textContent).toBe('已确认')
+    expect(row.getAttribute('title')).toBe('创造性判断的三步法 · 概念 三步法 · 相关卡片 2')
+    const other = defined(view.all('button.iw-row').find(button =>
+      button.textContent?.includes('什么是功能性特征') === true && !button.className.includes('iw-row-flat')))
+    expect(other.querySelector('.iw-row-meta')?.textContent).toBe('草稿')
+    expect(other.getAttribute('title')).toBe('什么是功能性特征')
+    await view.unmount()
+  })
+
   it('filters the tree by title without asking the library', async () => {
     const api = stubApi()
     const view = await mount(<LibraryPanel api={api} localeId="zh-CN" />)
@@ -1056,7 +1118,12 @@ describe('LibraryPanel', () => {
     expect(view.text()).toContain('规则卡（1）')
     await view.type(view.input('input.iw-filter-input'), '创造性')
     expect(view.text()).not.toContain('规则卡（1）')
-    expect(view.all('button.iw-row').some(row => row.textContent?.includes('创造性判断的三步法'))).toBe(true)
+    expect(view.text()).not.toContain('（2 组）')
+    const match = defined(view.all('button.iw-row').find(row => row.textContent?.includes('创造性判断的三步法')))
+    expect(match.querySelector('.iw-row-meta')?.textContent).toBe('已确认')
+    expect(match.getAttribute('title')).toContain('规则卡')
+    expect(match.getAttribute('title')).toContain('概念 三步法')
+    expect(match.getAttribute('title')).toContain('相关卡片 2')
     expect(api.calls.filter(call => call.startsWith('search:'))).toHaveLength(0)
     await view.type(view.input('input.iw-filter-input'), '没有这张卡')
     expect(view.text()).toContain('没有标题匹配的卡片')
