@@ -260,12 +260,15 @@ function StatusStrip({ status, lint, t, onOpenLint }: {
 }
 
 /** The reader pane for one card. */
-function CardReader({ document, t, busy, wiki, confirming, onAskDelete, onCancelDelete, onDelete }: {
+function CardReader({ document, t, busy, wiki, confirming, lintCounts, onOpenLint, onAskDelete, onCancelDelete, onDelete }: {
   readonly document: CardDocument
   readonly t: Messages
   readonly busy: boolean
   readonly wiki: WikilinkAccess
   readonly confirming: boolean
+  /** 这张卡的严重/警告计数；没有索引项时不画门禁芯片。 */
+  readonly lintCounts: PathLintCounts | undefined
+  readonly onOpenLint: () => void
   readonly onAskDelete: () => void
   readonly onCancelDelete: () => void
   readonly onDelete: () => void
@@ -290,6 +293,7 @@ function CardReader({ document, t, busy, wiki, confirming, onAskDelete, onCancel
         <Chip label={t.status} value={statusText(document.status, t)} />
         {document.needsReview ? <Chip label={t.needsReview} value="" tone="iw-chip-warn" /> : null}
         {document.supersededBy === '' ? null : <Chip label={t.supersededBy} value={document.supersededBy} tone="iw-chip-warn" />}
+        {lintCounts === undefined ? null : <LintGateChip counts={lintCounts} t={t} onOpen={onOpenLint} />}
       </div>
       {!confirming ? null : (
         <div className="iw-confirm iw-confirm-stack">
@@ -568,6 +572,88 @@ function groupFindings(findings: readonly LintFinding[]): readonly LintGroup[] {
     path,
     findings: findings.filter(finding => finding.path === path),
   }))
+}
+
+/** 一张卡上的严重与警告条数。建议不进这张表。 */
+interface PathLintCounts {
+  readonly critical: number
+  readonly warning: number
+}
+
+/**
+ * 从现有 findings 建 path → {critical, warning}。
+ *
+ * 建议不进树和卡头：大库里它是绝大多数。空路径是库级问题，没有树行。
+ */
+function lintCountsByPath(report: LintReport | null): ReadonlyMap<string, PathLintCounts> {
+  const index = new Map<string, { critical: number; warning: number }>()
+  if (report === null) return index
+  for (const finding of report.findings) {
+    if (finding.path === '' || finding.tier === 'suggestion') continue
+    const found = index.get(finding.path)
+    const current = found ?? { critical: 0, warning: 0 }
+    if (finding.tier === 'critical') current.critical += 1
+    else current.warning += 1
+    if (found === undefined) index.set(finding.path, current)
+  }
+  return index
+}
+
+/** 色点与卡头芯片的悬停：两档都写，含 0。 */
+function lintCountTitle(counts: PathLintCounts, t: Messages): string {
+  return `${t.lintStripCritical} ${String(counts.critical)} · ${t.lintStripWarning} ${String(counts.warning)}`
+}
+
+/** 树行状态旁的色点。有严重用 error，否则用 warn。不写数字。 */
+function LintDot({ counts, t }: { readonly counts: PathLintCounts; readonly t: Messages }): ReactNode {
+  const title = lintCountTitle(counts, t)
+  return (
+    <span
+      className="iw-lint-dot"
+      data-tone={counts.critical > 0 ? 'error' : 'warn'}
+      title={title}
+      aria-label={title}
+    />
+  )
+}
+
+/**
+ * 阅读器芯片只报更严重的那一档。
+ * 另一档的条数留在 title。点击打开门禁阅读器。
+ */
+function LintGateChip({ counts, t, onOpen }: {
+  readonly counts: PathLintCounts
+  readonly t: Messages
+  readonly onOpen: () => void
+}): ReactNode {
+  const severe = counts.critical > 0
+  const word = severe ? t.lintStripCritical : t.lintStripWarning
+  const value = severe ? counts.critical : counts.warning
+  return (
+    <button
+      type="button"
+      className={severe ? 'iw-chip iw-chip-error' : 'iw-chip iw-chip-warn'}
+      title={lintCountTitle(counts, t)}
+      onClick={onOpen}
+    >
+      {`${t.lintBadge} · ${word} `}<b>{value}</b>
+    </button>
+  )
+}
+
+/** 树行：标题、状态，以及有严重或警告时的色点。 */
+function CardTreeMarks({ card, counts, t }: {
+  readonly card: { readonly title: string; readonly status: string }
+  readonly counts: PathLintCounts | undefined
+  readonly t: Messages
+}): ReactNode {
+  return (
+    <>
+      <span className="iw-row-title">{card.title}</span>
+      <span className="iw-row-meta">{statusText(card.status, t)}</span>
+      {counts === undefined ? null : <LintDot counts={counts} t={t} />}
+    </>
+  )
 }
 
 /** 组头计数。为零的档不写。 */
@@ -1051,6 +1137,7 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
     : branches.flatMap(branch => branch.groups.flatMap(group => group.cards))
       .filter(card => card.title.toLowerCase().includes(needle))
   const groupCount = branches.reduce((sum, branch) => sum + branch.groups.length, 0)
+  const lintByPath = useMemo(() => lintCountsByPath(lint), [lint])
 
   return (
     <div className="iw-root">
@@ -1261,8 +1348,7 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
                           className={card.path === selectedPath ? 'iw-row iw-row-line iw-row-flat iw-row-selected' : 'iw-row iw-row-line iw-row-flat'}
                           onClick={() => { void openCard(card.path) }}
                         >
-                          <span className="iw-row-title">{card.title}</span>
-                          <span className="iw-row-meta">{statusText(card.status, t)}</span>
+                          <CardTreeMarks card={card} counts={lintByPath.get(card.path)} t={t} />
                         </button>
                       ))
                     )
@@ -1292,8 +1378,7 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
                                   className={card.path === selectedPath ? 'iw-row iw-row-line iw-row-selected' : 'iw-row iw-row-line'}
                                   onClick={() => { void openCard(card.path) }}
                                 >
-                                  <span className="iw-row-title">{card.title}</span>
-                                  <span className="iw-row-meta">{statusText(card.status, t)}</span>
+                                  <CardTreeMarks card={card} counts={lintByPath.get(card.path)} t={t} />
                                 </button>
                               ))}
                             </div>
@@ -1358,6 +1443,8 @@ export function LibraryPanel({ api, localeId }: LibraryPanelProps): ReactNode {
               busy={busy}
               wiki={wiki}
               confirming={confirmingDelete}
+              lintCounts={lintByPath.get(selection.document.path)}
+              onOpenLint={openLint}
               onAskDelete={() => { setConfirmingDelete(true) }}
               onCancelDelete={() => { setConfirmingDelete(false) }}
               onDelete={() => { void deleteSelection(selection.document.path) }}
